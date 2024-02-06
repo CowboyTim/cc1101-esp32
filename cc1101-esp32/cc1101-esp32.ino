@@ -221,7 +221,7 @@ void setup(){
 
   ELECHOUSE_cc1101.Init();
   ELECHOUSE_cc1101.setPA(5);
-  ELECHOUSE_cc1101.setMHZ(433.92);
+  ELECHOUSE_cc1101.setMHZ(868.326447);
   ELECHOUSE_cc1101.SetRx();
 }
 
