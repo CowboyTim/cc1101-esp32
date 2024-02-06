@@ -8,6 +8,8 @@
 #include "SerialCommands.h"
 #include "EEPROM.h"
 #include "sntp.h"
+#include "SPI.h"
+#include "ELECHOUSE_CC1101_SRC_DRV.h"
 
 #ifndef VERBOSE
 #define VERBOSE
@@ -32,9 +34,17 @@
 char atscbu[128] = {""};
 SerialCommands ATSc(&Serial, atscbu, sizeof(atscbu), "\r\n", "\r\n");
 
-#define CFGVERSION 0x01 // switch between 0x01/0x02 to reinit the config struct change
+#define CFGVERSION 0x02 // switch between 0x01/0x02 to reinit the config struct change
 #define CFGINIT    0x72 // at boot init check flag
 #define CFG_EEPROM 0x00 
+
+#ifdef VERBOSE
+ #define DOLOG(L)    if(cfg.do_verbose) Serial.print(L);
+ #define DOLOGLN(L)  if(cfg.do_verbose) Serial.println(L);
+#else
+ #define DOLOG(L) 
+ #define DOLOGLN(L) 
+#endif
 
 /* main config */
 typedef struct cfg_t {
@@ -69,10 +79,10 @@ void at_cmd_handler(SerialCommands* s, const char* atcmdline){
   unsigned int cmd_len = strlen(atcmdline);
   char *p = NULL;
   #ifdef AT_DEBUG
-  Serial.print(F("AT: ["));
-  Serial.print(atcmdline);
-  Serial.print(F("], size: "));
-  Serial.println(cmd_len);
+  DOLOG(F("AT: ["));
+  DOLOG(atcmdline);
+  DOLOG(F("], size: "));
+  DOLOGLN(cmd_len);
   #endif
   if(cmd_len == 2 && (p = at_cmd_check("AT", atcmdline, cmd_len))){
   } else if(p = at_cmd_check("AT+WIFI_SSID=", atcmdline, cmd_len)){
@@ -184,16 +194,35 @@ void setup(){
   // setup WiFi with ssid/pass from EEPROM if set
   setup_wifi();
 
-  #ifdef VERBOSE
-  if(cfg.do_verbose){
-    if(strlen(cfg.ntp_host) && strlen(cfg.wifi_ssid) && strlen(cfg.wifi_pass)){
-      Serial.print(F("will sync with ntp, wifi ssid/pass ok: "));
-      Serial.println(cfg.ntp_host);
-    }
+  if(strlen(cfg.ntp_host) && strlen(cfg.wifi_ssid) && strlen(cfg.wifi_pass)){
+    DOLOG(F("will sync with ntp, wifi ssid/pass ok: "));
+    DOLOGLN(cfg.ntp_host);
   }
-  #endif
   // setup NTP sync to RTC
   configTime(0, 0, (char *)&cfg.ntp_host);
+
+  /* ESP32 header not set? ELECHOUSE_cc1101 library uses that for default SPI
+	 pins and doesn't find it */
+  DOLOG("SS: ");
+  DOLOG(SS);
+  DOLOG(", MOSI: ");
+  DOLOG(MOSI);
+  DOLOG(", MISO: ");
+  DOLOG(MISO);
+  DOLOG(", SCK: ");
+  DOLOGLN(SCK);
+  ELECHOUSE_cc1101.setSpiPin(SCK, MISO, MOSI, SS);
+
+  if(ELECHOUSE_cc1101.getCC1101()){
+	DOLOGLN("SPI cc1101 found, Connection OK");
+  } else {
+	DOLOGLN("SPI cc1101 not found, Connection Error");
+  }
+
+  ELECHOUSE_cc1101.Init();
+  ELECHOUSE_cc1101.setPA(5);
+  ELECHOUSE_cc1101.setMHZ(433.92);
+  ELECHOUSE_cc1101.SetRx();
 }
 
 void loop(){
@@ -204,12 +233,8 @@ void loop(){
   if(millis() - last_wifi_check > 500){
     if(WiFi.status() == WL_CONNECTED){
       if(!logged_wifi_status){
-        #ifdef VERBOSE
-        if(cfg.do_verbose){
-          Serial.print(F("WiFi connected: "));
-          Serial.println(WiFi.localIP());
-        }
-        #endif
+        DOLOG(F("WiFi connected: "));
+        DOLOGLN(WiFi.localIP());
         logged_wifi_status = 1;
       }
     }
@@ -227,6 +252,7 @@ void setup_cfg(){
     // reinit
     cfg.initialized = CFGINIT;
     cfg.version     = CFGVERSION;
+    cfg.do_verbose  = 1;
     strcpy((char *)&cfg.ntp_host, (char *)DEFAULT_NTP_SERVER);
     // write
     EEPROM.put(CFG_EEPROM, cfg);
@@ -242,12 +268,8 @@ void setup_wifi(){
     return;
 
   // connect to Wi-Fi
-  #ifdef VERBOSE
-  if(cfg.do_verbose){
-    Serial.print(F("Connecting to "));
-    Serial.println(cfg.wifi_ssid);
-  }
-  #endif
+  DOLOG(F("Connecting to "));
+  DOLOGLN(cfg.wifi_ssid);
   WiFi.persistent(false);
   WiFi.begin(cfg.wifi_ssid, cfg.wifi_pass);
 }
