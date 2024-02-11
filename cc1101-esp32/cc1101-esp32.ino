@@ -5,6 +5,8 @@
 #include <ESP8266WiFi.h>
 #endif
 #include <errno.h>
+#include <stdarg.h>
+#include <stdio.h>
 #include "SerialCommands.h"
 #include "EEPROM.h"
 #include "sntp.h"
@@ -24,7 +26,7 @@
 #endif
 
 /* ESP yield */
-#if ARDUINO_ARCH_ESP8266 || ARDUINO_ARCH_ESP32
+#if defined(ARDUINO_ARCH_ESP8266) || defined(ARDUINO_ARCH_ESP32)
  #define doYIELD yield();
 #else
  #define doYIELD
@@ -39,8 +41,18 @@ SerialCommands ATSc(&Serial, atscbu, sizeof(atscbu), "\r\n", "\r\n");
 #define CFG_EEPROM 0x00 
 
 #ifdef VERBOSE
- #define DOLOG(L)    if(cfg.do_verbose) Serial.print(L);
- #define DOLOGLN(L)  if(cfg.do_verbose) Serial.println(L);
+ #if defined(ARDUINO_ARCH_ESP8266) || defined(ARDUINO_ARCH_ESP32) || defined(ESP32)
+  /*#include "esp_log.h"
+  #include "esp_app_trace.h"
+  #define DOLOG(L)    ESP_LOGI("CC1101-ESP32C3", "%s", L);
+  #define DOLOGLN(L)  ESP_LOGI("CC1101-ESP32C3", "%s\n", L);
+  */
+  #define DOLOG(L)    Serial.print(L);
+  #define DOLOGLN(L)  Serial.println(L);
+ #else
+  #define DOLOG(L)    Serial.print(L);
+  #define DOLOGLN(L)  Serial.println(L);
+ #endif
 #else
  #define DOLOG(L) 
  #define DOLOGLN(L) 
@@ -62,6 +74,15 @@ uint8_t ntp_is_synced         = 1;
 uint8_t logged_wifi_status    = 0;
 unsigned long last_wifi_check = 0;
 void(* resetFunc)(void) = 0;
+
+/*
+void jtag_log(const char *fmt, ...){
+  va_list arguments_list;
+  va_start(arguments_list, fmt);
+  ESP_LOGI("CC1101-ESP32C3", fmt, arguments_list);
+  va_end(arguments_list);
+}
+*/
 
 char* at_cmd_check(const char *cmd, const char *at_cmd, unsigned short at_len){
   unsigned short l = strlen(cmd); /* AT+<cmd>=, or AT, or AT+<cmd>? */
@@ -177,11 +198,26 @@ void at_cmd_handler(SerialCommands* s, const char* atcmdline){
 }
 
 void setup(){
+  /*
+  esp_log_level_set("*", ESP_LOG_INFO);
+  //esp_log_set_vprintf(esp_apptrace_vprintf);
+  esp_log_set_vprintf(vprintf);
+  */
+
   // Serial setup, init at 115200 8N1
   Serial.begin(115200, SERIAL_8N1);
 
   // setup cfg
   setup_cfg();
+
+  DOLOG("SS: ");
+  DOLOG(SS);
+  DOLOG(", MOSI: ");
+  DOLOG(MOSI);
+  DOLOG(", MISO: ");
+  DOLOG(MISO);
+  DOLOG(", SCK: ");
+  DOLOGLN(SCK);
 
   // Setup AT command handler
   ATSc.SetDefaultHandler(&at_cmd_handler);
@@ -203,16 +239,7 @@ void setup(){
 
   /* ESP32 header not set? ELECHOUSE_cc1101 library uses that for default SPI
 	 pins and doesn't find it */
-  DOLOG("SS: ");
-  DOLOG(SS);
-  DOLOG(", MOSI: ");
-  DOLOG(MOSI);
-  DOLOG(", MISO: ");
-  DOLOG(MISO);
-  DOLOG(", SCK: ");
-  DOLOGLN(SCK);
   ELECHOUSE_cc1101.setSpiPin(SCK, MISO, MOSI, SS);
-
   if(ELECHOUSE_cc1101.getCC1101()){
 	DOLOGLN("SPI cc1101 found, Connection OK");
   } else {

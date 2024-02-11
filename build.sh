@@ -3,6 +3,7 @@
 MODULE=${MODULE:-cc1101-esp32}
 DEV_BOARD=${DEV_BOARD:-esp32:esp32:lolin32-lite}
 DEV_PORT=${DEV_PORT:-/dev/ttyUSB0}
+DEV_BOARD_BAUDRATE=${DEV_BOARD_BAUDRATE:-115200}
 
 function do_update(){
     DEV_URLS=${DEV_URLS:-https://dl.espressif.com/dl/package_esp32_index.json}
@@ -16,6 +17,7 @@ function do_update(){
         arduino-cli --additional-urls "$DEV_URLS" board list
     }
 }
+
 function do_build(){
     DEV_EXTRA_FLAGS=""
     if [ ! -z "${DEBUG}" -a "${DEBUG}" = "1" ]; then
@@ -24,12 +26,10 @@ function do_build(){
     if [ ! -z "${AT_DEBUG}" -a "${AT_DEBUG}" = "1" ]; then
         DEV_EXTRA_FLAGS="$DEV_EXTRA_FLAGS -DAT_DEBUG"
     fi
-    if [ ! -z "${VERBOSE}" ]; then
-        DEV_EXTRA_FLAGS="$DEV_EXTRA_FLAGS -DVERBOSE"
-    fi
     if [ ! -z "${DEFAULT_NTP_SERVER}" ]; then
         DEV_EXTRA_FLAGS="$DEV_EXTRA_FLAGS -DDEFAULT_NTP_SERVER=\"${DEFAULT_NTP_SERVER}\""
     fi
+    set -x
     arduino-cli -b ${DEV_BOARD} compile \
         --log \
         --log-level info \
@@ -46,7 +46,7 @@ function do_upload(){
 }
 
 function do_monitor(){
-    arduino-cli -b ${DEV_BOARD} monitor -p ${DEV_PORT} -c baudrate=${DEV_BOARD_BAUDRATE:-115200}
+    arduino-cli -b ${DEV_BOARD} monitor -p ${DEV_PORT} -c baudrate=${DEV_BOARD_BAUDRATE}
 }
 
 case $1 in
