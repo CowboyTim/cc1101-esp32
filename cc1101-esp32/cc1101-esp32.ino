@@ -1,3 +1,4 @@
+//#undef ARDUINO_USB_MODE
 #ifdef ARDUINO_ARCH_ESP32
 #include <WiFi.h>
 #endif
@@ -20,6 +21,9 @@
 #define DEBUG
 #endif
 
+#define HWSerial  Serial
+#define USBSerial Serial
+
 /* NTP server to use, can be configured later on via AT commands */
 #ifndef DEFAULT_NTP_SERVER
 #define DEFAULT_NTP_SERVER "at.pool.ntp.org"
@@ -34,7 +38,7 @@
 
 /* our AT commands over UART to config OTP's and WiFi */
 char atscbu[128] = {""};
-SerialCommands ATSc(&Serial, atscbu, sizeof(atscbu), "\r\n", "\r\n");
+SerialCommands ATSc(&USBSerial, atscbu, sizeof(atscbu), "\r\n", "\r\n");
 
 #define CFGVERSION 0x02 // switch between 0x01/0x02 to reinit the config struct change
 #define CFGINIT    0x72 // at boot init check flag
@@ -42,16 +46,11 @@ SerialCommands ATSc(&Serial, atscbu, sizeof(atscbu), "\r\n", "\r\n");
 
 #ifdef VERBOSE
  #if defined(ARDUINO_ARCH_ESP8266) || defined(ARDUINO_ARCH_ESP32) || defined(ESP32)
-  /*#include "esp_log.h"
-  #include "esp_app_trace.h"
-  #define DOLOG(L)    ESP_LOGI("CC1101-ESP32C3", "%s", L);
-  #define DOLOGLN(L)  ESP_LOGI("CC1101-ESP32C3", "%s\n", L);
-  */
-  #define DOLOG(L)    Serial.print(L);
-  #define DOLOGLN(L)  Serial.println(L);
+  #define DOLOG(L)    USBSerial.print(L);
+  #define DOLOGLN(L)  USBSerial.println(L);
  #else
-  #define DOLOG(L)    Serial.print(L);
-  #define DOLOGLN(L)  Serial.println(L);
+  #define DOLOG(L)    HWSerial.print(L);
+  #define DOLOGLN(L)  HWSerial.println(L);
  #endif
 #else
  #define DOLOG(L) 
@@ -73,6 +72,7 @@ cfg_t cfg;
 uint8_t ntp_is_synced         = 1;
 uint8_t logged_wifi_status    = 0;
 unsigned long last_wifi_check = 0;
+unsigned long last_cc1101_check = 0;
 void(* resetFunc)(void) = 0;
 
 /*
@@ -204,8 +204,11 @@ void setup(){
   esp_log_set_vprintf(vprintf);
   */
 
-  // Serial setup, init at 115200 8N1
-  Serial.begin(115200, SERIAL_8N1);
+  // Serial setup, at 115200
+  HWSerial.begin(115200);
+  HWSerial.setDebugOutput(true);
+  
+  USBSerial.begin();
 
   // setup cfg
   setup_cfg();
@@ -238,12 +241,12 @@ void setup(){
   configTime(0, 0, (char *)&cfg.ntp_host);
 
   /* ESP32 header not set? ELECHOUSE_cc1101 library uses that for default SPI
-	 pins and doesn't find it */
+     pins and doesn't find it */
   ELECHOUSE_cc1101.setSpiPin(SCK, MISO, MOSI, SS);
   if(ELECHOUSE_cc1101.getCC1101()){
-	DOLOGLN("SPI cc1101 found, Connection OK");
+    DOLOGLN("SPI cc1101 found, Connection OK");
   } else {
-	DOLOGLN("SPI cc1101 not found, Connection Error");
+    DOLOGLN("SPI cc1101 not found, Connection Error");
   }
 
   ELECHOUSE_cc1101.Init();
@@ -255,6 +258,16 @@ void setup(){
 void loop(){
   // any new AT command? on USB uart
   ATSc.ReadSerial();
+ 
+  // check cc1101 status
+  if(millis() - last_cc1101_check > 5000){
+    if(ELECHOUSE_cc1101.getCC1101()){
+      DOLOGLN("SPI cc1101 found, Connection OK");
+    } else {
+      DOLOGLN("SPI cc1101 not found, Connection Error");
+    }
+    last_cc1101_check = millis();
+  }
 
   // just wifi check
   if(millis() - last_wifi_check > 500){

@@ -1,13 +1,15 @@
 #!/bin/bash
 
 MODULE=${MODULE:-cc1101-esp32}
+DEV_PLATFORM=${DEV_PLATFORM:-esp32:esp32}
 DEV_BOARD=${DEV_BOARD:-esp32:esp32:lolin32-lite}
 DEV_PORT=${DEV_PORT:-/dev/ttyUSB0}
-DEV_BOARD_BAUDRATE=${DEV_BOARD_BAUDRATE:-115200}
+DEV_BOARD_BAUDRATE=${DEV_BOARD_BAUDRATE:-460800}
 
 function do_update(){
     DEV_URLS=${DEV_URLS:-https://dl.espressif.com/dl/package_esp32_index.json}
     [ "${DEV_UPDATE:-0}" = 1 ] && {
+		arduino-cli --additional-urls "$DEV_URLS" core install "$DEV_PLATFORM"
         arduino-cli --additional-urls "$DEV_URLS" update
         arduino-cli --additional-urls "$DEV_URLS" lib update-index
         arduino-cli --additional-urls "$DEV_URLS" lib install 'SerialCommands'
@@ -19,7 +21,7 @@ function do_update(){
 }
 
 function do_build(){
-    DEV_EXTRA_FLAGS=""
+    DEV_EXTRA_FLAGS="-DARDUINO_USB_MODE=1 -DARDUINO_USB_CDC_ON_BOOT=1"
     if [ ! -z "${DEBUG}" -a "${DEBUG}" = "1" ]; then
         DEV_EXTRA_FLAGS="$DEV_EXTRA_FLAGS -DDEBUG"
     fi
@@ -36,6 +38,7 @@ function do_build(){
         --output-dir dist \
         --build-property compiler.cpp.extra_flags="$DEV_EXTRA_FLAGS" \
         --build-property compiler.c.extra_flags="$DEV_EXTRA_FLAGS" \
+        --build-property build.extra_flags="$DEV_EXTRA_FLAGS" \
         --build-property build.partitions=min_spiffs \
         $MODULE \
         || exit $?
