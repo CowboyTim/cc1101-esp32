@@ -21,9 +21,6 @@
 #define DEBUG
 #endif
 
-#define HWSerial  Serial
-#define USBSerial Serial
-
 /* NTP server to use, can be configured later on via AT commands */
 #ifndef DEFAULT_NTP_SERVER
 #define DEFAULT_NTP_SERVER "at.pool.ntp.org"
@@ -38,7 +35,7 @@
 
 /* our AT commands over UART to config OTP's and WiFi */
 char atscbu[128] = {""};
-SerialCommands ATSc(&USBSerial, atscbu, sizeof(atscbu), "\r\n", "\r\n");
+SerialCommands ATSc(&Serial, atscbu, sizeof(atscbu), "\r\n", "\r\n");
 
 #define CFGVERSION 0x02 // switch between 0x01/0x02 to reinit the config struct change
 #define CFGINIT    0x72 // at boot init check flag
@@ -46,11 +43,11 @@ SerialCommands ATSc(&USBSerial, atscbu, sizeof(atscbu), "\r\n", "\r\n");
 
 #ifdef VERBOSE
  #if defined(ARDUINO_ARCH_ESP8266) || defined(ARDUINO_ARCH_ESP32) || defined(ESP32)
-  #define DOLOG(L)    USBSerial.print(L);
-  #define DOLOGLN(L)  USBSerial.println(L);
+  #define DOLOG(L)    Serial.print(L);
+  #define DOLOGLN(L)  Serial.println(L);
  #else
-  #define DOLOG(L)    HWSerial.print(L);
-  #define DOLOGLN(L)  HWSerial.println(L);
+  #define DOLOG(L)    Serial.print(L);
+  #define DOLOGLN(L)  Serial.println(L);
  #endif
 #else
  #define DOLOG(L) 
@@ -191,11 +188,9 @@ void at_cmd_handler(SerialCommands* s, const char* atcmdline){
 void setup(){
 
   // Serial setup, at 115200
-  HWSerial.begin(115200);
-  HWSerial.setDebugOutput(true);
-  
-  USBSerial.begin();
-
+  Serial.begin(115200);
+  Serial.setDebugOutput(true);
+ 
   // setup cfg
   setup_cfg();
 
@@ -244,7 +239,7 @@ void setup(){
 void loop(){
   // any new AT command? on USB uart
   ATSc.ReadSerial();
- 
+
   // check cc1101 status
   if(millis() - last_cc1101_check > 5000){
     if(ELECHOUSE_cc1101.getCC1101()){
