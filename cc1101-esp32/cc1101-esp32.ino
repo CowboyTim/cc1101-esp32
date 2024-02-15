@@ -75,15 +75,6 @@ unsigned long last_wifi_check = 0;
 unsigned long last_cc1101_check = 0;
 void(* resetFunc)(void) = 0;
 
-/*
-void jtag_log(const char *fmt, ...){
-  va_list arguments_list;
-  va_start(arguments_list, fmt);
-  ESP_LOGI("CC1101-ESP32C3", fmt, arguments_list);
-  va_end(arguments_list);
-}
-*/
-
 char* at_cmd_check(const char *cmd, const char *at_cmd, unsigned short at_len){
   unsigned short l = strlen(cmd); /* AT+<cmd>=, or AT, or AT+<cmd>? */
   if(at_len >= l && strncmp(cmd, at_cmd, l) == 0){
@@ -198,11 +189,6 @@ void at_cmd_handler(SerialCommands* s, const char* atcmdline){
 }
 
 void setup(){
-  /*
-  esp_log_level_set("*", ESP_LOG_INFO);
-  //esp_log_set_vprintf(esp_apptrace_vprintf);
-  esp_log_set_vprintf(vprintf);
-  */
 
   // Serial setup, at 115200
   HWSerial.begin(115200);
