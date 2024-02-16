@@ -55,8 +55,35 @@ SerialCommands ATSc(&Serial, atscbu, sizeof(atscbu), "\r\n", "\r\n");
 #endif
 
 typedef struct cc1101_cfg_t {
-  uint8_t initialized  = 0;
-  uint8_t version      = 0;
+  uint8_t initialized;
+  uint8_t version;
+  uint8_t sender;
+  uint8_t CCMode;
+  uint8_t Modulation;
+  double MHz;
+  double Deviation;
+  uint8_t Channel;
+  double Chsp;
+  double RxBW;
+  double DRate;
+  uint8_t PA;
+  uint8_t SyncMode;
+  uint8_t SyncWord1;
+  uint8_t SyncWord2;
+  uint8_t AdrChk;
+  uint8_t Addr;
+  uint8_t WhiteData;
+  uint8_t PktFormat;
+  uint8_t LengthConfig;
+  uint8_t PacketLength;
+  uint8_t Crc;
+  uint8_t CRC_AF;
+  uint8_t DcFilterOff;
+  uint8_t Manchester;
+  uint8_t FEC;
+  uint8_t PRE;
+  uint8_t PQT;
+  uint8_t AppendStatus;
 };
 
 /* main config */
@@ -159,18 +186,97 @@ void at_cmd_handler(SerialCommands* s, const char* atcmdline){
     }
     return;
   } else if(p = at_cmd_check("AT+CC1101=", atcmdline, cmd_len)){
+    DOLOGLN(F("GOT CFG 1"));
     size_t sz = (atcmdline+cmd_len)-p+1;
     if(sz > 128){
-      s->GetSerial()->println(F("CC1101 cfg max 128 chars"));
+      s->GetSerial()->println(F("cc1101 cfg max 128 chars"));
       s->GetSerial()->println(F("ERROR"));
       return;
     }
-    /* parse/check the CC1101 cfg */
-
-    /* keep/store */
-    strncpy((char *)&cfg.cc1101, p, sz);
-    EEPROM.put(CFG_EEPROM, cfg);
-    EEPROM.commit();
+    DOLOGLN(F("GOT CFG 2"));
+    /* parse/check the cc1101 cfg */
+    int r = sscanf(p, "%d,%d,%d,%f,%f,%d,%f,%f,%f,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d",
+        &cfg.cc1101.sender,
+        &cfg.cc1101.CCMode,
+        &cfg.cc1101.Modulation,
+        &cfg.cc1101.MHz,
+        &cfg.cc1101.Deviation,
+        &cfg.cc1101.Channel,
+        &cfg.cc1101.Chsp,
+        &cfg.cc1101.RxBW,
+        &cfg.cc1101.DRate,
+        &cfg.cc1101.PA,
+        &cfg.cc1101.SyncMode,
+        &cfg.cc1101.SyncWord1,
+        &cfg.cc1101.SyncWord2,
+        &cfg.cc1101.AdrChk,
+        &cfg.cc1101.Addr,
+        &cfg.cc1101.WhiteData,
+        &cfg.cc1101.PktFormat,
+        &cfg.cc1101.LengthConfig,
+        &cfg.cc1101.PacketLength,
+        &cfg.cc1101.Crc,
+        &cfg.cc1101.CRC_AF,
+        &cfg.cc1101.DcFilterOff,
+        &cfg.cc1101.Manchester,
+        &cfg.cc1101.FEC,
+        &cfg.cc1101.PRE,
+        &cfg.cc1101.PQT,
+        &cfg.cc1101.AppendStatus);
+    DOLOGLN(F("GOT CFG 3"));
+    if(r == 0){
+      s->GetSerial()->println(F("cc1101 cfg nr fields wrong"));
+      s->GetSerial()->println(F("ERROR"));
+      return;
+    }
+    DOLOGLN(F("GOT CFG 4"));
+    if(   (cfg.cc1101.sender == 1 || cfg.cc1101.sender == 0)
+       && (cfg.cc1101.CCMode == 1 || cfg.cc1101.CCMode == 0)
+       && (cfg.cc1101.Modulation >= 0 || cfg.cc1101.Modulation <= 4)
+       && (cfg.cc1101.Channel >= 0 && cfg.cc1101.Channel <= 255)
+       && (    cfg.cc1101.PA == -30 
+            || cfg.cc1101.PA == -20
+            || cfg.cc1101.PA == -15
+            || cfg.cc1101.PA == -10
+            || cfg.cc1101.PA ==  -6
+            || cfg.cc1101.PA ==   0
+            || cfg.cc1101.PA ==   5
+            || cfg.cc1101.PA ==   7
+            || cfg.cc1101.PA ==  10
+            || cfg.cc1101.PA ==  11
+            || cfg.cc1101.PA ==  12
+       )
+       && (cfg.cc1101.SyncMode >= 0 && cfg.cc1101.SyncMode <= 7)
+       && (cfg.cc1101.SyncWord1 >= 0 && cfg.cc1101.SyncWord1 <= 255)
+       && (cfg.cc1101.SyncWord2 >= 0 && cfg.cc1101.SyncWord2 <= 255)
+       && (cfg.cc1101.AdrChk >= 0 || cfg.cc1101.AdrChk <= 3)
+       && (cfg.cc1101.Addr >= 0 || cfg.cc1101.Addr <= 255)
+       && (cfg.cc1101.WhiteData == 0 || cfg.cc1101.WhiteData <= 0)
+       && (cfg.cc1101.PktFormat >= 0 || cfg.cc1101.PktFormat <= 3)
+       && (cfg.cc1101.LengthConfig >= 0 || cfg.cc1101.LengthConfig <= 3)
+       && (cfg.cc1101.PacketLength >= 0 || cfg.cc1101.PacketLength <= 255)
+       && (cfg.cc1101.Crc == 0 || cfg.cc1101.Crc == 1)
+       && (cfg.cc1101.CRC_AF == 0 || cfg.cc1101.CRC_AF == 1)
+       && (cfg.cc1101.DcFilterOff == 0 || cfg.cc1101.DcFilterOff == 1)
+       && (cfg.cc1101.Manchester == 0 || cfg.cc1101.Manchester == 1)
+       && (cfg.cc1101.FEC == 0 || cfg.cc1101.FEC == 1)
+       && (cfg.cc1101.PRE >= 0 || cfg.cc1101.PRE <= 7)
+       && (cfg.cc1101.PQT >= 0 || cfg.cc1101.PQT <= 4)
+       && (cfg.cc1101.AppendStatus == 1 || cfg.cc1101.AppendStatus == 0)
+    ){
+      if(cfg.cc1101.sender){
+        DOLOGLN(F("SEND"));
+      } else {
+        DOLOGLN(F("RECEIVE"));
+      }
+      /* keep/store */
+      EEPROM.put(CFG_EEPROM, cfg);
+      EEPROM.commit();
+    } else {
+      s->GetSerial()->println(F("cc1101 cfg invalid"));
+      s->GetSerial()->println(F("ERROR"));
+      return;
+    }
   } else if(p = at_cmd_check("AT+NTP_HOST=", atcmdline, cmd_len)){
     size_t sz = (atcmdline+cmd_len)-p+1;
     if(sz > 63){
