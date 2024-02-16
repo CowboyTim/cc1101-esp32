@@ -28,6 +28,12 @@ function do_build(){
     if [ ! -z "${AT_DEBUG}" -a "${AT_DEBUG}" = "1" ]; then
         DEV_EXTRA_FLAGS="$DEV_EXTRA_FLAGS -DAT_DEBUG"
     fi
+    if [ ! -z "${IS_SENDER}" -a "${IS_SENDER}" = "1" ]; then
+        DEV_EXTRA_FLAGS="$DEV_EXTRA_FLAGS -DIS_SENDER"
+    fi
+    if [ ! -z "${IS_RECEIVER}" -a "${IS_RECEIVER}" = "1" ]; then
+        DEV_EXTRA_FLAGS="$DEV_EXTRA_FLAGS -DIS_RECEIVER"
+    fi
     if [ ! -z "${DEFAULT_NTP_SERVER}" ]; then
         DEV_EXTRA_FLAGS="$DEV_EXTRA_FLAGS -DDEFAULT_NTP_SERVER=\"${DEFAULT_NTP_SERVER}\""
     fi
