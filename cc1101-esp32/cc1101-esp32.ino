@@ -109,6 +109,7 @@ uint8_t cc1101_changed[1]          = {0};
 uint8_t cc1101_initialized[1]      = {0};
 unsigned long last_wifi_check      = 0;
 unsigned long led_last_check       = 0;
+unsigned long last_logline         = 0;
 uint8_t led_status                 = 0;
 unsigned long last_cc1101_check[1] = {0};
 char uart_buffer[128] = {0};
@@ -544,13 +545,19 @@ void loop(){
         memset((char *)&uart_buffer, 0, sizeof(uart_buffer));
       }
     } else if(cfg.cc1101[0].sender == 0){
-      if(ELECHOUSE_cc1101.CheckReceiveFlag()){
-        DOLOG(F("CHECK RECEIVE BUFFER"));
-        if(ELECHOUSE_cc1101.CheckCRC()){
+      if(cfg.do_verbose){
+        if(millis() - last_logline > 5000){
           DOLOG(F("Rssi: "));
           DOLOG(ELECHOUSE_cc1101.getRssi());
           DOLOG(F(", LQI: "));
           DOLOGLN(ELECHOUSE_cc1101.getLqi());
+          last_logline = millis();
+        }
+      }
+      ELECHOUSE_cc1101.SetRx();
+      if(ELECHOUSE_cc1101.CheckReceiveFlag()){
+        DOLOG(F("CHECK RECEIVE BUFFER"));
+        if(ELECHOUSE_cc1101.CheckCRC()){
           int len = ELECHOUSE_cc1101.ReceiveData((byte *)&in_buffer);
           in_buffer[len] = '\0';
           Serial.println((char *)&in_buffer);
