@@ -544,7 +544,8 @@ void loop(){
         memset((char *)&uart_buffer, 0, sizeof(uart_buffer));
       }
     } else if(cfg.cc1101[0].sender == 0){
-      if(ELECHOUSE_cc1101.CheckRxFifo(100)){
+      if(ELECHOUSE_cc1101.CheckReceiveFlag()){
+        DOLOG(F("CHECK RECEIVE BUFFER"));
         if(ELECHOUSE_cc1101.CheckCRC()){
           DOLOG(F("Rssi: "));
           DOLOG(ELECHOUSE_cc1101.getRssi());
