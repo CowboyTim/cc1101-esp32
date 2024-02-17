@@ -43,11 +43,11 @@ SerialCommands ATSc(&Serial, atscbu, sizeof(atscbu), "\r\n", "\r\n");
 
 #ifdef VERBOSE
  #if defined(ARDUINO_ARCH_ESP8266) || defined(ARDUINO_ARCH_ESP32) || defined(ESP32)
-  #define DOLOG(L)    Serial.print(L);
-  #define DOLOGLN(L)  Serial.println(L);
+  #define DOLOG(L)    if(cfg.do_verbose) Serial.print(L);
+  #define DOLOGLN(L)  if(cfg.do_verbose) Serial.println(L);
  #else
-  #define DOLOG(L)    Serial.print(L);
-  #define DOLOGLN(L)  Serial.println(L);
+  #define DOLOG(L)    if(cfg.do_verbose) Serial.print(L);
+  #define DOLOGLN(L)  if(cfg.do_verbose) Serial.println(L);
  #endif
 #else
  #define DOLOG(L) 
@@ -95,14 +95,18 @@ typedef struct cfg_t {
   char wifi_ssid[32]   = {0};   // max 31 + 1
   char wifi_pass[64]   = {0};   // nax 63 + 1
   char ntp_host[64]    = {0};   // max hostname + 1
-  cc1101_cfg_t cc1101;
+  cc1101_cfg_t cc1101[1];
 };
 cfg_t cfg;
 
-uint8_t ntp_is_synced         = 1;
-uint8_t logged_wifi_status    = 0;
-unsigned long last_wifi_check = 0;
-unsigned long last_cc1101_check = 0;
+uint8_t ntp_is_synced              = 1;
+uint8_t logged_wifi_status         = 0;
+uint8_t cc1101_enabled[1]          = {0};
+uint8_t cc1101_changed[1]          = {0};
+unsigned long last_wifi_check      = 0;
+unsigned long last_cc1101_check[1] = {0};
+char uart_buffer[128] = {0};
+byte in_buffer[128]   = {0};
 void(* resetFunc)(void) = 0;
 
 char* at_cmd_check(const char *cmd, const char *at_cmd, unsigned short at_len){
@@ -160,6 +164,18 @@ void at_cmd_handler(SerialCommands* s, const char* atcmdline){
   } else if(p = at_cmd_check("AT+WIFI_PASS?", atcmdline, cmd_len)){
     s->GetSerial()->println(cfg.wifi_pass);
   #endif
+  #ifdef VERBOSE
+  } else if(p = at_cmd_check("AT+VERBOSE=1", atcmdline, cmd_len)){
+    cfg.do_verbose = 1;
+    EEPROM.put(CFG_EEPROM, cfg);
+    EEPROM.commit();
+  } else if(p = at_cmd_check("AT+VERBOSE=0", atcmdline, cmd_len)){
+    cfg.do_verbose = 0;
+    EEPROM.put(CFG_EEPROM, cfg);
+    EEPROM.commit();
+  } else if(p = at_cmd_check("AT+VERBOSE?", atcmdline, cmd_len)){
+    s->GetSerial()->println(cfg.do_verbose);
+  #endif
   } else if(p = at_cmd_check("AT+WIFI_STATUS?", atcmdline, cmd_len)){
     uint8_t wifi_stat = WiFi.status();
     switch(wifi_stat) {
@@ -196,33 +212,33 @@ void at_cmd_handler(SerialCommands* s, const char* atcmdline){
     DOLOGLN(F("GOT CFG 2"));
     /* parse/check the cc1101 cfg */
     int r = sscanf(p, "%d,%d,%d,%f,%f,%d,%f,%f,%f,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d",
-        &cfg.cc1101.sender,
-        &cfg.cc1101.CCMode,
-        &cfg.cc1101.Modulation,
-        &cfg.cc1101.MHz,
-        &cfg.cc1101.Deviation,
-        &cfg.cc1101.Channel,
-        &cfg.cc1101.Chsp,
-        &cfg.cc1101.RxBW,
-        &cfg.cc1101.DRate,
-        &cfg.cc1101.PA,
-        &cfg.cc1101.SyncMode,
-        &cfg.cc1101.SyncWord1,
-        &cfg.cc1101.SyncWord2,
-        &cfg.cc1101.AdrChk,
-        &cfg.cc1101.Addr,
-        &cfg.cc1101.WhiteData,
-        &cfg.cc1101.PktFormat,
-        &cfg.cc1101.LengthConfig,
-        &cfg.cc1101.PacketLength,
-        &cfg.cc1101.Crc,
-        &cfg.cc1101.CRC_AF,
-        &cfg.cc1101.DcFilterOff,
-        &cfg.cc1101.Manchester,
-        &cfg.cc1101.FEC,
-        &cfg.cc1101.PRE,
-        &cfg.cc1101.PQT,
-        &cfg.cc1101.AppendStatus);
+        &cfg.cc1101[0].sender,
+        &cfg.cc1101[0].CCMode,
+        &cfg.cc1101[0].Modulation,
+        &cfg.cc1101[0].MHz,
+        &cfg.cc1101[0].Deviation,
+        &cfg.cc1101[0].Channel,
+        &cfg.cc1101[0].Chsp,
+        &cfg.cc1101[0].RxBW,
+        &cfg.cc1101[0].DRate,
+        &cfg.cc1101[0].PA,
+        &cfg.cc1101[0].SyncMode,
+        &cfg.cc1101[0].SyncWord1,
+        &cfg.cc1101[0].SyncWord2,
+        &cfg.cc1101[0].AdrChk,
+        &cfg.cc1101[0].Addr,
+        &cfg.cc1101[0].WhiteData,
+        &cfg.cc1101[0].PktFormat,
+        &cfg.cc1101[0].LengthConfig,
+        &cfg.cc1101[0].PacketLength,
+        &cfg.cc1101[0].Crc,
+        &cfg.cc1101[0].CRC_AF,
+        &cfg.cc1101[0].DcFilterOff,
+        &cfg.cc1101[0].Manchester,
+        &cfg.cc1101[0].FEC,
+        &cfg.cc1101[0].PRE,
+        &cfg.cc1101[0].PQT,
+        &cfg.cc1101[0].AppendStatus);
     DOLOGLN(F("GOT CFG 3"));
     if(r == 0){
       s->GetSerial()->println(F("cc1101 cfg nr fields wrong"));
@@ -230,41 +246,41 @@ void at_cmd_handler(SerialCommands* s, const char* atcmdline){
       return;
     }
     DOLOGLN(F("GOT CFG 4"));
-    if(   (cfg.cc1101.sender == 1 || cfg.cc1101.sender == 0)
-       && (cfg.cc1101.CCMode == 1 || cfg.cc1101.CCMode == 0)
-       && (cfg.cc1101.Modulation >= 0 || cfg.cc1101.Modulation <= 4)
-       && (cfg.cc1101.Channel >= 0 && cfg.cc1101.Channel <= 255)
-       && (    cfg.cc1101.PA == -30 
-            || cfg.cc1101.PA == -20
-            || cfg.cc1101.PA == -15
-            || cfg.cc1101.PA == -10
-            || cfg.cc1101.PA ==  -6
-            || cfg.cc1101.PA ==   0
-            || cfg.cc1101.PA ==   5
-            || cfg.cc1101.PA ==   7
-            || cfg.cc1101.PA ==  10
-            || cfg.cc1101.PA ==  11
-            || cfg.cc1101.PA ==  12
+    if(   (cfg.cc1101[0].sender == 1 || cfg.cc1101[0].sender == 0)
+       && (cfg.cc1101[0].CCMode == 1 || cfg.cc1101[0].CCMode == 0)
+       && (cfg.cc1101[0].Modulation >= 0 || cfg.cc1101[0].Modulation <= 4)
+       && (cfg.cc1101[0].Channel >= 0 && cfg.cc1101[0].Channel <= 255)
+       && (    cfg.cc1101[0].PA == -30 
+            || cfg.cc1101[0].PA == -20
+            || cfg.cc1101[0].PA == -15
+            || cfg.cc1101[0].PA == -10
+            || cfg.cc1101[0].PA ==  -6
+            || cfg.cc1101[0].PA ==   0
+            || cfg.cc1101[0].PA ==   5
+            || cfg.cc1101[0].PA ==   7
+            || cfg.cc1101[0].PA ==  10
+            || cfg.cc1101[0].PA ==  11
+            || cfg.cc1101[0].PA ==  12
        )
-       && (cfg.cc1101.SyncMode >= 0 && cfg.cc1101.SyncMode <= 7)
-       && (cfg.cc1101.SyncWord1 >= 0 && cfg.cc1101.SyncWord1 <= 255)
-       && (cfg.cc1101.SyncWord2 >= 0 && cfg.cc1101.SyncWord2 <= 255)
-       && (cfg.cc1101.AdrChk >= 0 || cfg.cc1101.AdrChk <= 3)
-       && (cfg.cc1101.Addr >= 0 || cfg.cc1101.Addr <= 255)
-       && (cfg.cc1101.WhiteData == 0 || cfg.cc1101.WhiteData <= 0)
-       && (cfg.cc1101.PktFormat >= 0 || cfg.cc1101.PktFormat <= 3)
-       && (cfg.cc1101.LengthConfig >= 0 || cfg.cc1101.LengthConfig <= 3)
-       && (cfg.cc1101.PacketLength >= 0 || cfg.cc1101.PacketLength <= 255)
-       && (cfg.cc1101.Crc == 0 || cfg.cc1101.Crc == 1)
-       && (cfg.cc1101.CRC_AF == 0 || cfg.cc1101.CRC_AF == 1)
-       && (cfg.cc1101.DcFilterOff == 0 || cfg.cc1101.DcFilterOff == 1)
-       && (cfg.cc1101.Manchester == 0 || cfg.cc1101.Manchester == 1)
-       && (cfg.cc1101.FEC == 0 || cfg.cc1101.FEC == 1)
-       && (cfg.cc1101.PRE >= 0 || cfg.cc1101.PRE <= 7)
-       && (cfg.cc1101.PQT >= 0 || cfg.cc1101.PQT <= 4)
-       && (cfg.cc1101.AppendStatus == 1 || cfg.cc1101.AppendStatus == 0)
+       && (cfg.cc1101[0].SyncMode >= 0 && cfg.cc1101[0].SyncMode <= 7)
+       && (cfg.cc1101[0].SyncWord1 >= 0 && cfg.cc1101[0].SyncWord1 <= 255)
+       && (cfg.cc1101[0].SyncWord2 >= 0 && cfg.cc1101[0].SyncWord2 <= 255)
+       && (cfg.cc1101[0].AdrChk >= 0 || cfg.cc1101[0].AdrChk <= 3)
+       && (cfg.cc1101[0].Addr >= 0 || cfg.cc1101[0].Addr <= 255)
+       && (cfg.cc1101[0].WhiteData == 0 || cfg.cc1101[0].WhiteData <= 0)
+       && (cfg.cc1101[0].PktFormat >= 0 || cfg.cc1101[0].PktFormat <= 3)
+       && (cfg.cc1101[0].LengthConfig >= 0 || cfg.cc1101[0].LengthConfig <= 3)
+       && (cfg.cc1101[0].PacketLength >= 0 || cfg.cc1101[0].PacketLength <= 255)
+       && (cfg.cc1101[0].Crc == 0 || cfg.cc1101[0].Crc == 1)
+       && (cfg.cc1101[0].CRC_AF == 0 || cfg.cc1101[0].CRC_AF == 1)
+       && (cfg.cc1101[0].DcFilterOff == 0 || cfg.cc1101[0].DcFilterOff == 1)
+       && (cfg.cc1101[0].Manchester == 0 || cfg.cc1101[0].Manchester == 1)
+       && (cfg.cc1101[0].FEC == 0 || cfg.cc1101[0].FEC == 1)
+       && (cfg.cc1101[0].PRE >= 0 || cfg.cc1101[0].PRE <= 7)
+       && (cfg.cc1101[0].PQT >= 0 || cfg.cc1101[0].PQT <= 4)
+       && (cfg.cc1101[0].AppendStatus == 1 || cfg.cc1101[0].AppendStatus == 0)
     ){
-      if(cfg.cc1101.sender){
+      if(cfg.cc1101[0].sender){
         DOLOGLN(F("SEND"));
       } else {
         DOLOGLN(F("RECEIVE"));
@@ -272,6 +288,7 @@ void at_cmd_handler(SerialCommands* s, const char* atcmdline){
       /* keep/store */
       EEPROM.put(CFG_EEPROM, cfg);
       EEPROM.commit();
+      cc1101_changed[0] = 1;
     } else {
       s->GetSerial()->println(F("cc1101 cfg invalid"));
       s->GetSerial()->println(F("ERROR"));
@@ -302,8 +319,12 @@ void at_cmd_handler(SerialCommands* s, const char* atcmdline){
     s->GetSerial()->println(F("OK"));
     resetFunc();
     return;
+  } else if(cmd_len >= 3 && (p = at_cmd_check("AT+", atcmdline, cmd_len))){
+    s->GetSerial()->println(F("ERROR unkown AT command"));
+    return;
   } else {
-    s->GetSerial()->println(F("ERROR"));
+	/* just relay the data */
+    memcpy((char *)&uart_buffer, atcmdline, cmd_len);
     return;
   }
   s->GetSerial()->println(F("OK"));
@@ -351,36 +372,13 @@ void setup(){
   ELECHOUSE_cc1101.setSpiPin(SCK, MISO, MOSI, SS);
   if(ELECHOUSE_cc1101.getCC1101()){
     DOLOGLN("SPI cc1101 found, Connection OK");
+    cc1101_enabled[0] = 1;
   } else {
     DOLOGLN("SPI cc1101 not found, Connection Error");
+    cc1101_enabled[0] = 0;
   }
 
   ELECHOUSE_cc1101.Init();
-  //ELECHOUSE_cc1101.setCCMode(1);          // set config for internal transmission mode.
-  //ELECHOUSE_cc1101.setModulation(0);      // set modulation mode. 0 = 2-FSK, 1 = GFSK, 2 = ASK/OOK, 3 = 4-FSK, 4 = MSK.
-  ELECHOUSE_cc1101.setMHZ(868.326447);    // Here you can set your basic frequency. The lib calculates the frequency automatically (default = 433.92).The cc1101 can: 300-348 MHZ, 387-464MHZ and 779-928MHZ. Read More info from datasheet.
-  //ELECHOUSE_cc1101.setDeviation(47.60);   // Set the Frequency deviation in kHz. Value from 1.58 to 380.85. Default is 47.60 kHz.
-  //ELECHOUSE_cc1101.setChannel(0);         // Set the Channelnumber from 0 to 255. Default is cahnnel 0.
-  //ELECHOUSE_cc1101.setChsp(199.95);       // The channel spacing is multiplied by the channel number CHAN and added to the base frequency in kHz. Value from 25.39 to 405.45. Default is 199.95 kHz.
-  //ELECHOUSE_cc1101.setRxBW(812.50);       // Set the Receive Bandwidth in kHz. Value from 58.03 to 812.50. Default is 812.50 kHz.
-  //ELECHOUSE_cc1101.setDRate(99.97);       // Set the Data Rate in kBaud. Value from 0.02 to 1621.83. Default is 99.97 kBaud!
-  //ELECHOUSE_cc1101.setPA(5);              // Set TxPower. The following settings are possible depending on the frequency band.  (-30  -20  -15  -10  -6    0    5    7    10   11   12) Default is max!
-  //ELECHOUSE_cc1101.setSyncMode(2);        // Combined sync-word qualifier mode. 0 = No preamble/sync. 1 = 16 sync word bits detected. 2 = 16/16 sync word bits detected. 3 = 30/32 sync word bits detected. 4 = No preamble/sync, carrier-sense above threshold. 5 = 15/16 + carrier-sense above threshold. 6 = 16/16 + carrier-sense above threshold. 7 = 30/32 + carrier-sense above threshold.
-  //ELECHOUSE_cc1101.setSyncWord(211, 145); // Set sync word. Must be the same for the transmitter and receiver. (Syncword high, Syncword low)
-  //ELECHOUSE_cc1101.setAdrChk(0);          // Controls address check configuration of received packages. 0 = No address check. 1 = Address check, no broadcast. 2 = Address check and 0 (0x00) broadcast. 3 = Address check and 0 (0x00) and 255 (0xFF) broadcast.
-  //ELECHOUSE_cc1101.setAddr(0);            // Address used for packet filtration. Optional broadcast addresses are 0 (0x00) and 255 (0xFF).
-  //ELECHOUSE_cc1101.setWhiteData(0);       // Turn data whitening on / off. 0 = Whitening off. 1 = Whitening on.
-  //ELECHOUSE_cc1101.setPktFormat(0);       // Format of RX and TX data. 0 = Normal mode, use FIFOs for RX and TX. 1 = Synchronous serial mode, Data in on GDO0 and data out on either of the GDOx pins. 2 = Random TX mode; sends random data using PN9 generator. Used for test. Works as normal mode, setting 0 (00), in RX. 3 = Asynchronous serial mode, Data in on GDO0 and data out on either of the GDOx pins.
-  //ELECHOUSE_cc1101.setLengthConfig(1);    // 0 = Fixed packet length mode. 1 = Variable packet length mode. 2 = Infinite packet length mode. 3 = Reserved
-  //ELECHOUSE_cc1101.setPacketLength(0);    // Indicates the packet length when fixed packet length mode is enabled. If variable packet length mode is used, this value indicates the maximum packet length allowed.
-  //ELECHOUSE_cc1101.setCrc(1);             // 1 = CRC calculation in TX and CRC check in RX enabled. 0 = CRC disabled for TX and RX.
-  //ELECHOUSE_cc1101.setCRC_AF(0);          // Enable automatic flush of RX FIFO when CRC is not OK. This requires that only one packet is in the RXIFIFO and that packet length is limited to the RX FIFO size.
-  //ELECHOUSE_cc1101.setDcFilterOff(0);     // Disable digital DC blocking filter before demodulator. Only for data rates ≤ 250 kBaud The recommended IF frequency changes when the DC blocking is disabled. 1 = Disable (current optimized). 0 = Enable (better sensitivity).
-  //ELECHOUSE_cc1101.setManchester(0);      // Enables Manchester encoding/decoding. 0 = Disable. 1 = Enable.
-  //ELECHOUSE_cc1101.setFEC(0);             // Enable Forward Error Correction (FEC) with interleaving for packet payload (Only supported for fixed packet length mode. 0 = Disable. 1 = Enable.
-  //ELECHOUSE_cc1101.setPRE(0);             // Sets the minimum number of preamble bytes to be transmitted. Values: 0 : 2, 1 : 3, 2 : 4, 3 : 6, 4 : 8, 5 : 12, 6 : 16, 7 : 24
-  //ELECHOUSE_cc1101.setPQT(0);             // Preamble quality estimator threshold. The preamble quality estimator increases an internal counter by one each time a bit is received that is different from the previous bit, and decreases the counter by 8 each time a bit is received that is the same as the last bit. A threshold of 4∙PQT for this counter is used to gate sync word detection. When PQT=0 a sync word is always accepted.
-  //ELECHOUSE_cc1101.setAppendStatus(0);    // When enabled, two status bytes will be appended to the payload of the packet. The status bytes contain RSSI and LQI values, as well as CRC OK.
 }
 
 void loop(){
@@ -388,13 +386,65 @@ void loop(){
   ATSc.ReadSerial();
 
   // check cc1101 status
-  if(millis() - last_cc1101_check > 5000){
+  if(millis() - last_cc1101_check[0] > 5000){
     if(ELECHOUSE_cc1101.getCC1101()){
       DOLOGLN("SPI cc1101 found, Connection OK");
+      cc1101_enabled[0] = 1;
     } else {
       DOLOGLN("SPI cc1101 not found, Connection Error");
+      cc1101_enabled[0] = 0;
     }
-    last_cc1101_check = millis();
+    last_cc1101_check[0] = millis();
+  }
+
+  if(cc1101_enabled[0] && cc1101_changed[0] == 1){
+    DOLOGLN(F("CC1101 settings changed"));
+    ELECHOUSE_cc1101.setCCMode(cfg.cc1101[0].CCMode);
+    ELECHOUSE_cc1101.setModulation(cfg.cc1101[0].Modulation);
+    ELECHOUSE_cc1101.setMHZ(cfg.cc1101[0].MHz);
+    ELECHOUSE_cc1101.setDeviation(cfg.cc1101[0].Deviation);
+    ELECHOUSE_cc1101.setChannel(cfg.cc1101[0].Channel);
+    ELECHOUSE_cc1101.setChsp(cfg.cc1101[0].Chsp);
+    ELECHOUSE_cc1101.setRxBW(cfg.cc1101[0].RxBW);
+    ELECHOUSE_cc1101.setDRate(cfg.cc1101[0].DRate);
+    ELECHOUSE_cc1101.setPA(cfg.cc1101[0].PA);
+    ELECHOUSE_cc1101.setSyncMode(cfg.cc1101[0].SyncMode);
+    ELECHOUSE_cc1101.setSyncWord(cfg.cc1101[0].SyncWord1, cfg.cc1101[0].SyncWord2);
+    ELECHOUSE_cc1101.setAdrChk(cfg.cc1101[0].AdrChk);
+    ELECHOUSE_cc1101.setAddr(cfg.cc1101[0].Addr);
+    ELECHOUSE_cc1101.setWhiteData(cfg.cc1101[0].WhiteData);
+    ELECHOUSE_cc1101.setPktFormat(cfg.cc1101[0].PktFormat);
+    ELECHOUSE_cc1101.setLengthConfig(cfg.cc1101[0].LengthConfig);
+    ELECHOUSE_cc1101.setPacketLength(cfg.cc1101[0].PacketLength);
+    ELECHOUSE_cc1101.setCrc(cfg.cc1101[0].Crc);
+    ELECHOUSE_cc1101.setCRC_AF(cfg.cc1101[0].CRC_AF);
+    ELECHOUSE_cc1101.setDcFilterOff(cfg.cc1101[0].DcFilterOff);
+    ELECHOUSE_cc1101.setManchester(cfg.cc1101[0].Manchester);
+    ELECHOUSE_cc1101.setFEC(cfg.cc1101[0].FEC);
+    ELECHOUSE_cc1101.setPRE(cfg.cc1101[0].PRE);
+    ELECHOUSE_cc1101.setPQT(cfg.cc1101[0].PQT);
+    ELECHOUSE_cc1101.setAppendStatus(cfg.cc1101[0].AppendStatus);
+    cc1101_changed[0] = 0;
+  }
+
+  if(cfg.cc1101[0].sender == 1 && strlen((char *)&uart_buffer) > 0){
+    DOLOG(F("SEND BUFFER: "));
+    DOLOGLN(uart_buffer);
+    ELECHOUSE_cc1101.SendData((char *)&uart_buffer, strlen((char *)&uart_buffer));
+    memset((char *)&uart_buffer, 0, sizeof(uart_buffer));
+  } else {
+    if(ELECHOUSE_cc1101.CheckRxFifo(100)){
+      if(ELECHOUSE_cc1101.CheckCRC()){
+        DOLOG(F("Rssi: "));
+        DOLOG(ELECHOUSE_cc1101.getRssi());
+        DOLOG(F(", LQI: "));
+        DOLOGLN(ELECHOUSE_cc1101.getLqi());
+        int len = ELECHOUSE_cc1101.ReceiveData((byte *)&in_buffer);
+        in_buffer[len] = '\0';
+        Serial.println((char *)&in_buffer);
+        memset(in_buffer, 0, sizeof(in_buffer));
+      }
+    }
   }
 
   // just wifi check
@@ -426,12 +476,12 @@ void setup_cfg(){
     EEPROM.put(CFG_EEPROM, cfg);
     EEPROM.commit();
   }
-  if(cfg.cc1101.initialized != CFGINIT || cfg.cc1101.version != CFGVERSION){
+  if(cfg.cc1101[0].initialized != CFGINIT || cfg.cc1101[0].version != CFGVERSION){
     // clear
-    memset(&cfg.cc1101, 0, sizeof(cc1101_cfg_t));
+    memset(&cfg.cc1101[0], 0, sizeof(cc1101_cfg_t));
     // reinit
-    cfg.cc1101.initialized = CFGINIT;
-    cfg.cc1101.version     = CFGVERSION;
+    cfg.cc1101[0].initialized = CFGINIT;
+    cfg.cc1101[0].version     = CFGVERSION;
     // write
     EEPROM.put(CFG_EEPROM, cfg);
     EEPROM.commit();

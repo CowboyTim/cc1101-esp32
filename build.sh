@@ -25,7 +25,7 @@ function do_build(){
     if [ ! -z "${DEBUG}" -a "${DEBUG}" = "1" ]; then
         DEV_EXTRA_FLAGS="$DEV_EXTRA_FLAGS -DDEBUG"
     fi
-    if [ ! -z "${AT_DEBUG}" -a "${AT_DEBUG}" = "1" ]; then
+    if [ ! -z "${AT_DEBUG}" -a "${AT_DEBUG:-1}" = "1" ]; then
         DEV_EXTRA_FLAGS="$DEV_EXTRA_FLAGS -DAT_DEBUG"
     fi
     if [ ! -z "${IS_SENDER}" -a "${IS_SENDER}" = "1" ]; then
