@@ -106,6 +106,7 @@ uint8_t ntp_is_synced              = 1;
 uint8_t logged_wifi_status         = 0;
 uint8_t cc1101_enabled[1]          = {0};
 uint8_t cc1101_changed[1]          = {0};
+uint8_t cc1101_initialized[1]      = {0};
 unsigned long last_wifi_check      = 0;
 unsigned long led_last_check       = 0;
 uint8_t led_status                 = 0;
@@ -421,7 +422,7 @@ void loop(){
     last_cc1101_check[0] = millis();
   }
 
-  if(cc1101_enabled[0] && cc1101_changed[0] == 1){
+  if(cc1101_enabled[0] && (cc1101_changed[0] || !cc1101_initialized[0])){
     DOLOGLN(F("CC1101 settings changed"));
     ELECHOUSE_cc1101.setCCMode(cfg.cc1101[0].CCMode);
     ELECHOUSE_cc1101.setModulation(cfg.cc1101[0].Modulation);
@@ -502,6 +503,7 @@ void loop(){
     DOLOG(cfg.cc1101[0].AppendStatus);
     DOLOGLN();
     cc1101_changed[0] = 0;
+    cc1101_initialized[0] = 1;
   }
 
   if(millis() - led_last_check > 500){
