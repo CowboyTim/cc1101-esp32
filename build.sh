@@ -3,7 +3,7 @@
 MODULE=${MODULE:-cc1101-esp32}
 DEV_PLATFORM=${DEV_PLATFORM:-esp32:esp32}
 DEV_BOARD=${DEV_BOARD:-esp32:esp32:esp32c3}
-DEV_PORT=${DEV_PORT:-/dev/ttyUSB0}
+DEV_PORT=${DEV_PORT:-/dev/ttyACM1}
 DEV_BOARD_BAUDRATE=${DEV_BOARD_BAUDRATE:-460800}
 
 function do_update(){
@@ -28,16 +28,12 @@ function do_build(){
     if [ ! -z "${AT_DEBUG}" -a "${AT_DEBUG:-1}" = "1" ]; then
         DEV_EXTRA_FLAGS="$DEV_EXTRA_FLAGS -DAT_DEBUG"
     fi
-    if [ ! -z "${IS_SENDER}" -a "${IS_SENDER}" = "1" ]; then
-        DEV_EXTRA_FLAGS="$DEV_EXTRA_FLAGS -DIS_SENDER"
-    fi
-    if [ ! -z "${IS_RECEIVER}" -a "${IS_RECEIVER}" = "1" ]; then
-        DEV_EXTRA_FLAGS="$DEV_EXTRA_FLAGS -DIS_RECEIVER"
+    if [ ! -z "${VERBOSE}" ]; then
+        DEV_EXTRA_FLAGS="$DEV_EXTRA_FLAGS -DVERBOSE"
     fi
     if [ ! -z "${DEFAULT_NTP_SERVER}" ]; then
         DEV_EXTRA_FLAGS="$DEV_EXTRA_FLAGS -DDEFAULT_NTP_SERVER=\"${DEFAULT_NTP_SERVER}\""
     fi
-    set -x
     arduino-cli -b ${DEV_BOARD} compile \
         --log \
         --log-level info \
