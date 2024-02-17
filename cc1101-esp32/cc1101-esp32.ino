@@ -228,9 +228,10 @@ void at_cmd_handler(SerialCommands* s, const char* atcmdline){
       s->GetSerial()->println(F("ERROR"));
       return;
     }
-    DOLOGLN(F("GOT CFG 2"));
+    DOLOGLN(F("GOT CFG 2:"));
+    DOLOGLN(p);
     /* parse/check the cc1101 cfg */
-    int r = sscanf(p, "%d,%d,%d,%f,%f,%d,%f,%f,%f,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d",
+    int r = sscanf(p, "%d,%d,%d,%lf,%lf,%d,%lf,%lf,%lf,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d",
         &cfg.cc1101[0].sender,
         &cfg.cc1101[0].CCMode,
         &cfg.cc1101[0].Modulation,
@@ -258,7 +259,8 @@ void at_cmd_handler(SerialCommands* s, const char* atcmdline){
         &cfg.cc1101[0].PRE,
         &cfg.cc1101[0].PQT,
         &cfg.cc1101[0].AppendStatus);
-    DOLOGLN(F("GOT CFG 3"));
+    DOLOG(F("GOT CFG 3: "));
+    DOLOGLN(r);
     if(r == 0){
       s->GetSerial()->println(F("cc1101 cfg nr fields wrong"));
       s->GetSerial()->println(F("ERROR"));
@@ -446,6 +448,59 @@ void loop(){
     ELECHOUSE_cc1101.setPRE(cfg.cc1101[0].PRE);
     ELECHOUSE_cc1101.setPQT(cfg.cc1101[0].PQT);
     ELECHOUSE_cc1101.setAppendStatus(cfg.cc1101[0].AppendStatus);
+    DOLOG(F("CCMode:"));
+    DOLOG(cfg.cc1101[0].CCMode);
+    DOLOG(F(",Modulation:"));
+    DOLOG(cfg.cc1101[0].Modulation);
+    DOLOG(F(",MHz:"));
+    DOLOG(cfg.cc1101[0].MHz);
+    DOLOG(F(",Deviation:"));
+    DOLOG(cfg.cc1101[0].Deviation);
+    DOLOG(F(",Channel:"));
+    DOLOG(cfg.cc1101[0].Channel);
+    DOLOG(F(",Chsp:"));
+    DOLOG(cfg.cc1101[0].Chsp);
+    DOLOG(F(",RxBW:"));
+    DOLOG(cfg.cc1101[0].RxBW);
+    DOLOG(F(",DRate:"));
+    DOLOG(cfg.cc1101[0].DRate);
+    DOLOG(F(",PA:"));
+    DOLOG(cfg.cc1101[0].PA);
+    DOLOG(F(",SyncMode:"));
+    DOLOG(cfg.cc1101[0].SyncMode);
+    DOLOG(F(",SyncWord1:"));
+    DOLOG(cfg.cc1101[0].SyncWord1);
+    DOLOG(F(",SyncWord2:"));
+    DOLOG(cfg.cc1101[0].SyncWord2);
+    DOLOG(F(",AdrChk:"));
+    DOLOG(cfg.cc1101[0].AdrChk);
+    DOLOG(F(",Addr:"));
+    DOLOG(cfg.cc1101[0].Addr);
+    DOLOG(F(",WhiteData:"));
+    DOLOG(cfg.cc1101[0].WhiteData);
+    DOLOG(F(",PktFormat:"));
+    DOLOG(cfg.cc1101[0].PktFormat);
+    DOLOG(F(",LengthConfig:"));
+    DOLOG(cfg.cc1101[0].LengthConfig);
+    DOLOG(F(",PacketLength:"));
+    DOLOG(cfg.cc1101[0].PacketLength);
+    DOLOG(F(",Crc:"));
+    DOLOG(cfg.cc1101[0].Crc);
+    DOLOG(F(",CRC_AF:"));
+    DOLOG(cfg.cc1101[0].CRC_AF);
+    DOLOG(F(",DcFilterOff:"));
+    DOLOG(cfg.cc1101[0].DcFilterOff);
+    DOLOG(F(",Manchester:"));
+    DOLOG(cfg.cc1101[0].Manchester);
+    DOLOG(F(",FEC:"));
+    DOLOG(cfg.cc1101[0].FEC);
+    DOLOG(F(",PRE:"));
+    DOLOG(cfg.cc1101[0].PRE);
+    DOLOG(F(",PQT:"));
+    DOLOG(cfg.cc1101[0].PQT);
+    DOLOG(F(",AppendStatus:"));
+    DOLOG(cfg.cc1101[0].AppendStatus);
+    DOLOGLN();
     cc1101_changed[0] = 0;
   }
 
