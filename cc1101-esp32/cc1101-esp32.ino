@@ -379,6 +379,7 @@ void setup(){
   }
 
   ELECHOUSE_cc1101.Init();
+  ELECHOUSE_cc1101.setGDO(0, 1);
 }
 
 void loop(){
