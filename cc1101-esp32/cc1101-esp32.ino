@@ -14,6 +14,9 @@
 #include "SPI.h"
 #include "ELECHOUSE_CC1101_SRC_DRV.h"
 
+#define LED_BUILTIN 8
+#define LED LED_BUILTIN
+
 #ifndef VERBOSE
 #define VERBOSE
 #endif
@@ -104,6 +107,8 @@ uint8_t logged_wifi_status         = 0;
 uint8_t cc1101_enabled[1]          = {0};
 uint8_t cc1101_changed[1]          = {0};
 unsigned long last_wifi_check      = 0;
+unsigned long led_last_check       = 0;
+uint8_t led_status                 = 0;
 unsigned long last_cc1101_check[1] = {0};
 char uart_buffer[128] = {0};
 byte in_buffer[128]   = {0};
@@ -281,7 +286,7 @@ void at_cmd_handler(SerialCommands* s, const char* atcmdline){
        && (cfg.cc1101[0].AppendStatus == 1 || cfg.cc1101[0].AppendStatus == 0)
     ){
       if(cfg.cc1101[0].sender){
-        DOLOGLN(F("SEND"));
+        DOLOGLN(F("SENDER"));
       } else {
         DOLOGLN(F("RECEIVE"));
       }
@@ -378,6 +383,8 @@ void setup(){
     cc1101_enabled[0] = 0;
   }
 
+  pinMode(LED, OUTPUT);
+
   ELECHOUSE_cc1101.Init();
   ELECHOUSE_cc1101.setGDO(0, 1);
 }
@@ -428,24 +435,47 @@ void loop(){
     cc1101_changed[0] = 0;
   }
 
-  if(cfg.cc1101[0].sender == 1){
-	if(strlen((char *)&uart_buffer) > 0){
-      DOLOG(F("SEND BUFFER: "));
-      DOLOGLN(uart_buffer);
-      ELECHOUSE_cc1101.SendData((char *)&uart_buffer, strlen((char *)&uart_buffer));
-      memset((char *)&uart_buffer, 0, sizeof(uart_buffer));
-	}
-  } else if(cfg.cc1101[0].sender == 0){
-    if(ELECHOUSE_cc1101.CheckRxFifo(100)){
-      if(ELECHOUSE_cc1101.CheckCRC()){
-        DOLOG(F("Rssi: "));
-        DOLOG(ELECHOUSE_cc1101.getRssi());
-        DOLOG(F(", LQI: "));
-        DOLOGLN(ELECHOUSE_cc1101.getLqi());
-        int len = ELECHOUSE_cc1101.ReceiveData((byte *)&in_buffer);
-        in_buffer[len] = '\0';
-        Serial.println((char *)&in_buffer);
-        memset(in_buffer, 0, sizeof(in_buffer));
+  if(millis() - led_last_check > 500){
+    if(cfg.cc1101[0].sender == 1){
+      DOLOG(F("LED BLINK SENDER:"));
+      DOLOG(LED);
+      DOLOG(F(","));
+      DOLOGLN(led_status);
+      digitalWrite(LED, led_status);
+      if(led_status == HIGH)
+        led_status = LOW;
+      else
+        led_status = HIGH;
+    } else {
+      DOLOG(F("LED BLINK RECEIVER:"));
+      DOLOG(LED);
+      DOLOG(F(","));
+      DOLOGLN(HIGH);
+      digitalWrite(LED, HIGH);
+    }
+    led_last_check = millis();
+  }
+
+  if(cc1101_enabled[0]){
+    if(cfg.cc1101[0].sender == 1){
+      if(strlen((char *)&uart_buffer) > 0){
+        DOLOG(F("SEND BUFFER: "));
+        DOLOGLN(uart_buffer);
+        ELECHOUSE_cc1101.SendData((char *)&uart_buffer, strlen((char *)&uart_buffer));
+        memset((char *)&uart_buffer, 0, sizeof(uart_buffer));
+      }
+    } else if(cfg.cc1101[0].sender == 0){
+      if(ELECHOUSE_cc1101.CheckRxFifo(100)){
+        if(ELECHOUSE_cc1101.CheckCRC()){
+          DOLOG(F("Rssi: "));
+          DOLOG(ELECHOUSE_cc1101.getRssi());
+          DOLOG(F(", LQI: "));
+          DOLOGLN(ELECHOUSE_cc1101.getLqi());
+          int len = ELECHOUSE_cc1101.ReceiveData((byte *)&in_buffer);
+          in_buffer[len] = '\0';
+          Serial.println((char *)&in_buffer);
+          memset(in_buffer, 0, sizeof(in_buffer));
+        }
       }
     }
   }
@@ -459,6 +489,7 @@ void loop(){
         logged_wifi_status = 1;
       }
     }
+    last_wifi_check = millis();
   }
 }
 
