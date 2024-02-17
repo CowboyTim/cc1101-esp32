@@ -427,12 +427,14 @@ void loop(){
     cc1101_changed[0] = 0;
   }
 
-  if(cfg.cc1101[0].sender == 1 && strlen((char *)&uart_buffer) > 0){
-    DOLOG(F("SEND BUFFER: "));
-    DOLOGLN(uart_buffer);
-    ELECHOUSE_cc1101.SendData((char *)&uart_buffer, strlen((char *)&uart_buffer));
-    memset((char *)&uart_buffer, 0, sizeof(uart_buffer));
-  } else {
+  if(cfg.cc1101[0].sender == 1){
+	if(strlen((char *)&uart_buffer) > 0){
+      DOLOG(F("SEND BUFFER: "));
+      DOLOGLN(uart_buffer);
+      ELECHOUSE_cc1101.SendData((char *)&uart_buffer, strlen((char *)&uart_buffer));
+      memset((char *)&uart_buffer, 0, sizeof(uart_buffer));
+	}
+  } else if(cfg.cc1101[0].sender == 0){
     if(ELECHOUSE_cc1101.CheckRxFifo(100)){
       if(ELECHOUSE_cc1101.CheckCRC()){
         DOLOG(F("Rssi: "));
