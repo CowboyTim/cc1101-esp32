@@ -503,7 +503,9 @@ void loop(){
     DOLOG(F(",AppendStatus:"));
     DOLOG(cfg.cc1101[0].AppendStatus);
     DOLOGLN();
-    if(!cfg.cc1101[0].is_sender)
+    if(cfg.cc1101[0].is_sender)
+      ELECHOUSE_cc1101.SetTx();
+    else
       ELECHOUSE_cc1101.SetRx();
     cc1101_changed[0] = 0;
     cc1101_initialized[0] = 1;
@@ -540,10 +542,16 @@ void loop(){
 
   if(cc1101_enabled[0]){
     if(cfg.cc1101[0].is_sender){
-      if(strlen((char *)&uart_buffer) > 0){
-        DOLOG(F("SEND BUFFER: "));
-        DOLOGLN(uart_buffer);
-        ELECHOUSE_cc1101.SendData((char *)&uart_buffer, strlen((char *)&uart_buffer));
+      int buffer_len = strlen((char *)&uart_buffer);
+      if(buffer_len > 0){
+        if(cfg.do_verbose){
+            DOLOG(F("SEND BUFFER["));
+            DOLOG(buffer_len);
+            DOLOG(F("]>>"));
+            DOLOG(uart_buffer);
+            DOLOGLN(F("<<"));
+        }
+        ELECHOUSE_cc1101.SendData((char *)&uart_buffer, buffer_len);
         memset((char *)&uart_buffer, 0, sizeof(uart_buffer));
       }
     } else if(!cfg.cc1101[0].is_sender){
