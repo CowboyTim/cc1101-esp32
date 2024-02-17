@@ -130,10 +130,12 @@ void at_cmd_handler(SerialCommands* s, const char* atcmdline){
   unsigned int cmd_len = strlen(atcmdline);
   char *p = NULL;
   #ifdef AT_DEBUG
+  if(cfg.do_debug){
   DOLOG(F("AT: ["));
   DOLOG(atcmdline);
   DOLOG(F("], size: "));
   DOLOGLN(cmd_len);
+  }
   #endif
   if(cmd_len == 2 && (p = at_cmd_check("AT", atcmdline, cmd_len))){
   } else if(p = at_cmd_check("AT+WIFI_SSID=", atcmdline, cmd_len)){
@@ -168,6 +170,18 @@ void at_cmd_handler(SerialCommands* s, const char* atcmdline){
   #ifdef DEBUG
   } else if(p = at_cmd_check("AT+WIFI_PASS?", atcmdline, cmd_len)){
     s->GetSerial()->println(cfg.wifi_pass);
+  #endif
+  #ifdef DEBUG
+  } else if(p = at_cmd_check("AT+DEBUG=1", atcmdline, cmd_len)){
+    cfg.do_debug = 1;
+    EEPROM.put(CFG_EEPROM, cfg);
+    EEPROM.commit();
+  } else if(p = at_cmd_check("AT+DEBUG=0", atcmdline, cmd_len)){
+    cfg.do_debug = 0;
+    EEPROM.put(CFG_EEPROM, cfg);
+    EEPROM.commit();
+  } else if(p = at_cmd_check("AT+DEBUG?", atcmdline, cmd_len)){
+    s->GetSerial()->println(cfg.do_debug);
   #endif
   #ifdef VERBOSE
   } else if(p = at_cmd_check("AT+VERBOSE=1", atcmdline, cmd_len)){
@@ -437,20 +451,28 @@ void loop(){
 
   if(millis() - led_last_check > 500){
     if(cfg.cc1101[0].sender == 1){
-      DOLOG(F("LED BLINK SENDER:"));
-      DOLOG(LED);
-      DOLOG(F(","));
-      DOLOGLN(led_status);
+      #ifdef DEBUG
+      if(cfg.do_debug){
+        DOLOG(F("LED BLINK SENDER:"));
+        DOLOG(LED);
+        DOLOG(F(","));
+        DOLOGLN(led_status);
+      }
+      #endif
       digitalWrite(LED, led_status);
       if(led_status == HIGH)
         led_status = LOW;
       else
         led_status = HIGH;
     } else {
-      DOLOG(F("LED BLINK RECEIVER:"));
-      DOLOG(LED);
-      DOLOG(F(","));
-      DOLOGLN(HIGH);
+      #ifdef DEBUG
+      if(cfg.do_debug){
+        DOLOG(F("LED BLINK RECEIVER:"));
+        DOLOG(LED);
+        DOLOG(F(","));
+        DOLOGLN(HIGH);
+      }
+      #endif
       digitalWrite(LED, HIGH);
     }
     led_last_check = millis();

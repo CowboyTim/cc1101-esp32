@@ -22,10 +22,12 @@ function do_update(){
 
 function do_build(){
     DEV_EXTRA_FLAGS="-DARDUINO_USB_MODE=1 -DARDUINO_USB_CDC_ON_BOOT=1"
+    DEBUG=${DEBUG:-1}
+    AT_DEBUG=${AT_DEBUG:-1}
     if [ ! -z "${DEBUG}" -a "${DEBUG}" = "1" ]; then
         DEV_EXTRA_FLAGS="$DEV_EXTRA_FLAGS -DDEBUG"
     fi
-    if [ ! -z "${AT_DEBUG}" -a "${AT_DEBUG:-1}" = "1" ]; then
+    if [ ! -z "${AT_DEBUG}" -a "${AT_DEBUG}" = "1" ]; then
         DEV_EXTRA_FLAGS="$DEV_EXTRA_FLAGS -DAT_DEBUG"
     fi
     if [ ! -z "${VERBOSE}" ]; then
