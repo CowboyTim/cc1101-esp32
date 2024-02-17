@@ -60,7 +60,7 @@ SerialCommands ATSc(&Serial, atscbu, sizeof(atscbu), "\r\n", "\r\n");
 typedef struct cc1101_cfg_t {
   uint8_t initialized;
   uint8_t version;
-  uint8_t sender;
+  uint8_t is_sender;
   uint8_t CCMode;
   uint8_t Modulation;
   double MHz;
@@ -234,7 +234,7 @@ void at_cmd_handler(SerialCommands* s, const char* atcmdline){
     DOLOGLN(p);
     /* parse/check the cc1101 cfg */
     int r = sscanf(p, "%d,%d,%d,%lf,%lf,%d,%lf,%lf,%lf,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d",
-        &cfg.cc1101[0].sender,
+        &cfg.cc1101[0].is_sender,
         &cfg.cc1101[0].CCMode,
         &cfg.cc1101[0].Modulation,
         &cfg.cc1101[0].MHz,
@@ -269,7 +269,7 @@ void at_cmd_handler(SerialCommands* s, const char* atcmdline){
       return;
     }
     DOLOGLN(F("GOT CFG 4"));
-    if(   (cfg.cc1101[0].sender == 1 || cfg.cc1101[0].sender == 0)
+    if(   (cfg.cc1101[0].is_sender == 1 || cfg.cc1101[0].is_sender == 0)
        && (cfg.cc1101[0].CCMode == 1 || cfg.cc1101[0].CCMode == 0)
        && (cfg.cc1101[0].Modulation >= 0 || cfg.cc1101[0].Modulation <= 4)
        && (cfg.cc1101[0].Channel >= 0 && cfg.cc1101[0].Channel <= 255)
@@ -303,7 +303,7 @@ void at_cmd_handler(SerialCommands* s, const char* atcmdline){
        && (cfg.cc1101[0].PQT >= 0 || cfg.cc1101[0].PQT <= 4)
        && (cfg.cc1101[0].AppendStatus == 1 || cfg.cc1101[0].AppendStatus == 0)
     ){
-      if(cfg.cc1101[0].sender){
+      if(cfg.cc1101[0].is_sender){
         DOLOGLN(F("SENDER"));
       } else {
         DOLOGLN(F("RECEIVE"));
@@ -503,12 +503,14 @@ void loop(){
     DOLOG(F(",AppendStatus:"));
     DOLOG(cfg.cc1101[0].AppendStatus);
     DOLOGLN();
+    if(!cfg.cc1101[0].is_sender)
+      ELECHOUSE_cc1101.SetRx();
     cc1101_changed[0] = 0;
     cc1101_initialized[0] = 1;
   }
 
   if(millis() - led_last_check > 500){
-    if(cfg.cc1101[0].sender == 1){
+    if(cfg.cc1101[0].is_sender){
       #ifdef DEBUG
       if(cfg.do_debug){
         DOLOG(F("LED BLINK SENDER:"));
@@ -537,14 +539,14 @@ void loop(){
   }
 
   if(cc1101_enabled[0]){
-    if(cfg.cc1101[0].sender == 1){
+    if(cfg.cc1101[0].is_sender){
       if(strlen((char *)&uart_buffer) > 0){
         DOLOG(F("SEND BUFFER: "));
         DOLOGLN(uart_buffer);
         ELECHOUSE_cc1101.SendData((char *)&uart_buffer, strlen((char *)&uart_buffer));
         memset((char *)&uart_buffer, 0, sizeof(uart_buffer));
       }
-    } else if(cfg.cc1101[0].sender == 0){
+    } else if(!cfg.cc1101[0].is_sender){
       if(cfg.do_verbose){
         if(millis() - last_logline > 5000){
           DOLOG(F("Rssi: "));
@@ -554,7 +556,6 @@ void loop(){
           last_logline = millis();
         }
       }
-      ELECHOUSE_cc1101.SetRx();
       if(ELECHOUSE_cc1101.CheckReceiveFlag()){
         DOLOG(F("CHECK RECEIVE BUFFER"));
         if(ELECHOUSE_cc1101.CheckCRC()){
