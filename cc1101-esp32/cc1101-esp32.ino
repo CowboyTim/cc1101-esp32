@@ -233,34 +233,35 @@ void at_cmd_handler(SerialCommands* s, const char* atcmdline){
     DOLOGLN(F("GOT CFG 2:"));
     DOLOGLN(p);
     /* parse/check the cc1101 cfg */
+    cc1101_cfg_t tmp_cc1101_cf;
     int r = sscanf(p, "%d,%d,%d,%lf,%lf,%d,%lf,%lf,%lf,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d",
-        &cfg.cc1101[0].is_sender,
-        &cfg.cc1101[0].CCMode,
-        &cfg.cc1101[0].Modulation,
-        &cfg.cc1101[0].MHz,
-        &cfg.cc1101[0].Deviation,
-        &cfg.cc1101[0].Channel,
-        &cfg.cc1101[0].Chsp,
-        &cfg.cc1101[0].RxBW,
-        &cfg.cc1101[0].DRate,
-        &cfg.cc1101[0].PA,
-        &cfg.cc1101[0].SyncMode,
-        &cfg.cc1101[0].SyncWord1,
-        &cfg.cc1101[0].SyncWord2,
-        &cfg.cc1101[0].AdrChk,
-        &cfg.cc1101[0].Addr,
-        &cfg.cc1101[0].WhiteData,
-        &cfg.cc1101[0].PktFormat,
-        &cfg.cc1101[0].LengthConfig,
-        &cfg.cc1101[0].PacketLength,
-        &cfg.cc1101[0].Crc,
-        &cfg.cc1101[0].CRC_AF,
-        &cfg.cc1101[0].DcFilterOff,
-        &cfg.cc1101[0].Manchester,
-        &cfg.cc1101[0].FEC,
-        &cfg.cc1101[0].PRE,
-        &cfg.cc1101[0].PQT,
-        &cfg.cc1101[0].AppendStatus);
+        &tmp_cc1101_cf.is_sender,
+        &tmp_cc1101_cf.CCMode,
+        &tmp_cc1101_cf.Modulation,
+        &tmp_cc1101_cf.MHz,
+        &tmp_cc1101_cf.Deviation,
+        &tmp_cc1101_cf.Channel,
+        &tmp_cc1101_cf.Chsp,
+        &tmp_cc1101_cf.RxBW,
+        &tmp_cc1101_cf.DRate,
+        &tmp_cc1101_cf.PA,
+        &tmp_cc1101_cf.SyncMode,
+        &tmp_cc1101_cf.SyncWord1,
+        &tmp_cc1101_cf.SyncWord2,
+        &tmp_cc1101_cf.AdrChk,
+        &tmp_cc1101_cf.Addr,
+        &tmp_cc1101_cf.WhiteData,
+        &tmp_cc1101_cf.PktFormat,
+        &tmp_cc1101_cf.LengthConfig,
+        &tmp_cc1101_cf.PacketLength,
+        &tmp_cc1101_cf.Crc,
+        &tmp_cc1101_cf.CRC_AF,
+        &tmp_cc1101_cf.DcFilterOff,
+        &tmp_cc1101_cf.Manchester,
+        &tmp_cc1101_cf.FEC,
+        &tmp_cc1101_cf.PRE,
+        &tmp_cc1101_cf.PQT,
+        &tmp_cc1101_cf.AppendStatus);
     DOLOG(F("GOT CFG 3: "));
     DOLOGLN(r);
     if(r == 0){
@@ -269,49 +270,55 @@ void at_cmd_handler(SerialCommands* s, const char* atcmdline){
       return;
     }
     DOLOGLN(F("GOT CFG 4"));
-    if(   (cfg.cc1101[0].is_sender == 1 || cfg.cc1101[0].is_sender == 0)
-       && (cfg.cc1101[0].CCMode == 1 || cfg.cc1101[0].CCMode == 0)
-       && (cfg.cc1101[0].Modulation >= 0 || cfg.cc1101[0].Modulation <= 4)
-       && (cfg.cc1101[0].Channel >= 0 && cfg.cc1101[0].Channel <= 255)
-       && (    cfg.cc1101[0].PA == -30 
-            || cfg.cc1101[0].PA == -20
-            || cfg.cc1101[0].PA == -15
-            || cfg.cc1101[0].PA == -10
-            || cfg.cc1101[0].PA ==  -6
-            || cfg.cc1101[0].PA ==   0
-            || cfg.cc1101[0].PA ==   5
-            || cfg.cc1101[0].PA ==   7
-            || cfg.cc1101[0].PA ==  10
-            || cfg.cc1101[0].PA ==  11
-            || cfg.cc1101[0].PA ==  12
+    if(   (tmp_cc1101_cf.is_sender == 1  || tmp_cc1101_cf.is_sender == 0)
+       && (tmp_cc1101_cf.CCMode == 1     || tmp_cc1101_cf.CCMode == 0)
+       && (tmp_cc1101_cf.Modulation >= 0 || tmp_cc1101_cf.Modulation <= 4)
+       && (tmp_cc1101_cf.Channel >= 0    && tmp_cc1101_cf.Channel <= 255)
+       && (    tmp_cc1101_cf.PA == -30 
+            || tmp_cc1101_cf.PA == -20
+            || tmp_cc1101_cf.PA == -15
+            || tmp_cc1101_cf.PA == -10
+            || tmp_cc1101_cf.PA ==  -6
+            || tmp_cc1101_cf.PA ==   0
+            || tmp_cc1101_cf.PA ==   5
+            || tmp_cc1101_cf.PA ==   7
+            || tmp_cc1101_cf.PA ==  10
+            || tmp_cc1101_cf.PA ==  11
+            || tmp_cc1101_cf.PA ==  12
        )
-       && (cfg.cc1101[0].SyncMode >= 0 && cfg.cc1101[0].SyncMode <= 7)
-       && (cfg.cc1101[0].SyncWord1 >= 0 && cfg.cc1101[0].SyncWord1 <= 255)
-       && (cfg.cc1101[0].SyncWord2 >= 0 && cfg.cc1101[0].SyncWord2 <= 255)
-       && (cfg.cc1101[0].AdrChk >= 0 || cfg.cc1101[0].AdrChk <= 3)
-       && (cfg.cc1101[0].Addr >= 0 || cfg.cc1101[0].Addr <= 255)
-       && (cfg.cc1101[0].WhiteData == 0 || cfg.cc1101[0].WhiteData <= 0)
-       && (cfg.cc1101[0].PktFormat >= 0 || cfg.cc1101[0].PktFormat <= 3)
-       && (cfg.cc1101[0].LengthConfig >= 0 || cfg.cc1101[0].LengthConfig <= 3)
-       && (cfg.cc1101[0].PacketLength >= 0 || cfg.cc1101[0].PacketLength <= 255)
-       && (cfg.cc1101[0].Crc == 0 || cfg.cc1101[0].Crc == 1)
-       && (cfg.cc1101[0].CRC_AF == 0 || cfg.cc1101[0].CRC_AF == 1)
-       && (cfg.cc1101[0].DcFilterOff == 0 || cfg.cc1101[0].DcFilterOff == 1)
-       && (cfg.cc1101[0].Manchester == 0 || cfg.cc1101[0].Manchester == 1)
-       && (cfg.cc1101[0].FEC == 0 || cfg.cc1101[0].FEC == 1)
-       && (cfg.cc1101[0].PRE >= 0 || cfg.cc1101[0].PRE <= 7)
-       && (cfg.cc1101[0].PQT >= 0 || cfg.cc1101[0].PQT <= 4)
-       && (cfg.cc1101[0].AppendStatus == 1 || cfg.cc1101[0].AppendStatus == 0)
+       && (tmp_cc1101_cf.SyncMode >= 0     && tmp_cc1101_cf.SyncMode <= 7)
+       && (tmp_cc1101_cf.SyncWord1 >= 0    && tmp_cc1101_cf.SyncWord1 <= 255)
+       && (tmp_cc1101_cf.SyncWord2 >= 0    && tmp_cc1101_cf.SyncWord2 <= 255)
+       && (tmp_cc1101_cf.AdrChk >= 0       || tmp_cc1101_cf.AdrChk <= 3)
+       && (tmp_cc1101_cf.Addr >= 0         || tmp_cc1101_cf.Addr <= 255)
+       && (tmp_cc1101_cf.WhiteData == 0    || tmp_cc1101_cf.WhiteData <= 1)
+       && (tmp_cc1101_cf.PktFormat >= 0    || tmp_cc1101_cf.PktFormat <= 3)
+       && (tmp_cc1101_cf.LengthConfig >= 0 || tmp_cc1101_cf.LengthConfig <= 3)
+       && (tmp_cc1101_cf.PacketLength >= 0 || tmp_cc1101_cf.PacketLength <= 255)
+       && (tmp_cc1101_cf.Crc == 0          || tmp_cc1101_cf.Crc == 1)
+       && (tmp_cc1101_cf.CRC_AF == 0       || tmp_cc1101_cf.CRC_AF == 1)
+       && (tmp_cc1101_cf.DcFilterOff == 0  || tmp_cc1101_cf.DcFilterOff == 1)
+       && (tmp_cc1101_cf.Manchester == 0   || tmp_cc1101_cf.Manchester == 1)
+       && (tmp_cc1101_cf.FEC == 0          || tmp_cc1101_cf.FEC == 1)
+       && (tmp_cc1101_cf.PRE >= 0          || tmp_cc1101_cf.PRE <= 7)
+       && (tmp_cc1101_cf.PQT >= 0          || tmp_cc1101_cf.PQT <= 4)
+       && (tmp_cc1101_cf.AppendStatus == 1 || tmp_cc1101_cf.AppendStatus == 0)
     ){
-      if(cfg.cc1101[0].is_sender){
+      if(tmp_cc1101_cf.is_sender){
         DOLOGLN(F("SENDER"));
       } else {
-        DOLOGLN(F("RECEIVE"));
+        DOLOGLN(F("RECEIVER"));
       }
       /* keep/store */
-      EEPROM.put(CFG_EEPROM, cfg);
-      EEPROM.commit();
-      cc1101_changed[0] = 1;
+      if(sizeof(cc1101_cfg_t) == memcmp(&cfg.cc1101[0], &tmp_cc1101_cf, sizeof(cc1101_cfg_t))){
+        DOLOGLN(F("Config changed, saving to EEPROM"));
+        memcpy((char *)&cfg.cc1101[0], &tmp_cc1101_cf, sizeof(cc1101_cfg_t));
+        EEPROM.put(CFG_EEPROM, cfg);
+        EEPROM.commit();
+        cc1101_changed[0] = 1;
+      } else {
+        DOLOGLN(F("Config not changed, not saving to EEPROM"));
+      }
     } else {
       s->GetSerial()->println(F("cc1101 cfg invalid"));
       s->GetSerial()->println(F("ERROR"));
@@ -404,7 +411,6 @@ void setup(){
   pinMode(LED, OUTPUT);
 
   ELECHOUSE_cc1101.Init();
-  ELECHOUSE_cc1101.setGDO(0, 1);
 }
 
 void loop(){
@@ -424,10 +430,15 @@ void loop(){
   }
 
   if(cc1101_enabled[0] && (cc1101_changed[0] || !cc1101_initialized[0])){
-    DOLOGLN(F("CC1101 settings changed"));
+    if(cc1101_changed[0]){
+      DOLOGLN(F("CC1101 settings changed"));
+    } else {
+      DOLOGLN(F("CC1101 config apply at init"));
+    }
+    ELECHOUSE_cc1101.setGDO(0, 1);
     ELECHOUSE_cc1101.setCCMode(cfg.cc1101[0].CCMode);
     ELECHOUSE_cc1101.setModulation(cfg.cc1101[0].Modulation);
-    ELECHOUSE_cc1101.setMHZ(cfg.cc1101[0].MHz);
+    //ELECHOUSE_cc1101.setMHZ(cfg.cc1101[0].MHz);
     ELECHOUSE_cc1101.setDeviation(cfg.cc1101[0].Deviation);
     ELECHOUSE_cc1101.setChannel(cfg.cc1101[0].Channel);
     ELECHOUSE_cc1101.setChsp(cfg.cc1101[0].Chsp);
@@ -450,6 +461,7 @@ void loop(){
     ELECHOUSE_cc1101.setPRE(cfg.cc1101[0].PRE);
     ELECHOUSE_cc1101.setPQT(cfg.cc1101[0].PQT);
     ELECHOUSE_cc1101.setAppendStatus(cfg.cc1101[0].AppendStatus);
+    if(cfg.do_verbose){
     DOLOG(F("CCMode:"));
     DOLOG(cfg.cc1101[0].CCMode);
     DOLOG(F(",Modulation:"));
@@ -503,11 +515,13 @@ void loop(){
     DOLOG(F(",AppendStatus:"));
     DOLOG(cfg.cc1101[0].AppendStatus);
     DOLOGLN();
+    }
     if(cfg.cc1101[0].is_sender)
-      ELECHOUSE_cc1101.SetTx();
+      ELECHOUSE_cc1101.SetTx(cfg.cc1101[0].MHz);
     else
-      ELECHOUSE_cc1101.SetRx();
-    cc1101_changed[0] = 0;
+      ELECHOUSE_cc1101.SetRx(cfg.cc1101[0].MHz);
+    // bookeeping
+    cc1101_changed[0]     = 0;
     cc1101_initialized[0] = 1;
   }
 
@@ -545,33 +559,42 @@ void loop(){
       int buffer_len = strlen((char *)&uart_buffer);
       if(buffer_len > 0){
         if(cfg.do_verbose){
-            DOLOG(F("SEND BUFFER["));
-            DOLOG(buffer_len);
-            DOLOG(F("]>>"));
-            DOLOG(uart_buffer);
-            DOLOGLN(F("<<"));
+          DOLOG(F("SEND BUFFER["));
+          DOLOG(buffer_len);
+          DOLOG(F("]>>"));
+          DOLOG(uart_buffer);
+          DOLOGLN(F("<<"));
         }
-        ELECHOUSE_cc1101.SendData((char *)&uart_buffer, buffer_len);
+        /* use "byte" as type, and convert to that, the ELECHOUSE_cc1101 lib behaves differently */
+        ELECHOUSE_cc1101.SendData((byte *)&uart_buffer, (byte)buffer_len);
         memset((char *)&uart_buffer, 0, sizeof(uart_buffer));
       }
     } else if(!cfg.cc1101[0].is_sender){
       if(cfg.do_verbose){
         if(millis() - last_logline > 5000){
           DOLOG(F("Rssi: "));
-          DOLOG(ELECHOUSE_cc1101.getRssi());
-          DOLOG(F(", LQI: "));
-          DOLOGLN(ELECHOUSE_cc1101.getLqi());
+          DOLOGLN(ELECHOUSE_cc1101.getRssi());
           last_logline = millis();
         }
       }
       if(ELECHOUSE_cc1101.CheckReceiveFlag()){
-        DOLOG(F("CHECK RECEIVE BUFFER"));
-        if(ELECHOUSE_cc1101.CheckCRC()){
-          int len = ELECHOUSE_cc1101.ReceiveData((byte *)&in_buffer);
-          in_buffer[len] = '\0';
-          Serial.println((char *)&in_buffer);
-          memset(in_buffer, 0, sizeof(in_buffer));
+        if(cfg.do_verbose){
+          uint8_t lqi = ELECHOUSE_cc1101.getLqi();
+          DOLOG(F("CHECK RECEIVE BUFFER: lqi="));
+          DOLOG(lqi);
+          DOLOG(F(",crc="));
+          DOLOGLN(bitRead(lqi,7));
         }
+        int len = ELECHOUSE_cc1101.ReceiveData((byte *)&in_buffer);
+        in_buffer[len] = '\0';
+        if(cfg.do_verbose){
+          DOLOG(F("RECEIVED["));
+          DOLOG(strlen((char *)&in_buffer));
+          DOLOG(F("]>>"));
+        }
+        Serial.println((char *)&in_buffer);
+        DOLOGLN(F("<<"));
+        memset(in_buffer, 0, sizeof(in_buffer));
       }
     }
   }
