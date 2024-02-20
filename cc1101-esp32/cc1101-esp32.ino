@@ -89,6 +89,56 @@ typedef struct cc1101_cfg_t {
   uint8_t AppendStatus;
 };
 
+typedef struct cc1101_cfg_regs_t {
+  uint8_t IOCFG2     ;
+  uint8_t IOCFG1     ;
+  uint8_t IOCFG0     ;
+  uint8_t FIFOTHR    ;
+  uint8_t SYNC1      ;
+  uint8_t SYNC0      ;
+  uint8_t PKTLEN     ;
+  uint8_t PKTCTRL1   ;
+  uint8_t PKTCTRL0   ;
+  uint8_t ADDR       ;
+  uint8_t CHANNR     ;
+  uint8_t FSCTRL1    ;
+  uint8_t FSCTRL0    ;
+  uint8_t FREQ2      ;
+  uint8_t FREQ1      ;
+  uint8_t FREQ0      ;
+  uint8_t MDMCFG4    ;
+  uint8_t MDMCFG3    ;
+  uint8_t MDMCFG2    ;
+  uint8_t MDMCFG1    ;
+  uint8_t MDMCFG0    ;
+  uint8_t DEVIATN    ;
+  uint8_t MCSM2      ;
+  uint8_t MCSM1      ;
+  uint8_t MCSM0      ;
+  uint8_t FOCCFG     ;
+  uint8_t BSCFG      ;
+  uint8_t AGCCTRL2   ;
+  uint8_t AGCCTRL1   ;
+  uint8_t AGCCTRL0   ;
+  uint8_t WOREVT1    ;
+  uint8_t WOREVT0    ;
+  uint8_t WORCTRL    ;
+  uint8_t FREND1     ;
+  uint8_t FREND0     ;
+  uint8_t FSCAL3     ;
+  uint8_t FSCAL2     ;
+  uint8_t FSCAL1     ;
+  uint8_t FSCAL0     ;
+  uint8_t RCCTRL1    ;
+  uint8_t RCCTRL0    ;
+  uint8_t FSTEST     ;
+  uint8_t PTEST      ;
+  uint8_t AGCTEST    ;
+  uint8_t TEST2      ;
+  uint8_t TEST1      ;
+  uint8_t TEST0      ;
+};
+
 /* main config */
 typedef struct cfg_t {
   uint8_t initialized  = 0;
@@ -310,7 +360,7 @@ void at_cmd_handler(SerialCommands* s, const char* atcmdline){
         DOLOGLN(F("RECEIVER"));
       }
       /* keep/store */
-      if(sizeof(cc1101_cfg_t) == memcmp(&cfg.cc1101[0], &tmp_cc1101_cf, sizeof(cc1101_cfg_t))){
+      if(0 != memcmp(&cfg.cc1101[0], &tmp_cc1101_cf, sizeof(cc1101_cfg_t))){
         DOLOGLN(F("Config changed, saving to EEPROM"));
         memcpy((char *)&cfg.cc1101[0], &tmp_cc1101_cf, sizeof(cc1101_cfg_t));
         EEPROM.put(CFG_EEPROM, cfg);
@@ -397,6 +447,8 @@ void setup(){
   // setup NTP sync to RTC
   configTime(0, 0, (char *)&cfg.ntp_host);
 
+  delay(5000);
+
   /* ESP32 header not set? ELECHOUSE_cc1101 library uses that for default SPI
      pins and doesn't find it */
   ELECHOUSE_cc1101.setSpiPin(SCK, MISO, MOSI, SS);
@@ -410,6 +462,7 @@ void setup(){
 
   pinMode(LED, OUTPUT);
 
+  SPI.begin();
   ELECHOUSE_cc1101.Init();
 }
 
@@ -419,6 +472,7 @@ void loop(){
 
   // check cc1101 status
   if(millis() - last_cc1101_check[0] > 5000){
+    cc1101_read_cfg(&cfg.cc1101[0]);
     if(ELECHOUSE_cc1101.getCC1101()){
       DOLOGLN("SPI cc1101 found, Connection OK");
       cc1101_enabled[0] = 1;
@@ -653,5 +707,102 @@ void setup_wifi(){
   DOLOGLN(cfg.wifi_ssid);
   WiFi.persistent(false);
   WiFi.begin(cfg.wifi_ssid, cfg.wifi_pass);
+}
+
+#define IOCFG2     0x00
+#define IOCFG1     0x01
+#define IOCFG0     0x02
+#define FIFOTHR    0x03
+#define SYNC1      0x04
+#define SYNC0      0x05
+#define PKTLEN     0x06
+#define PKTCTRL1   0x07
+#define PKTCTRL0   0x08
+#define ADDR       0x09
+#define CHANNR     0x0A
+#define FSCTRL1    0x0B
+#define FSCTRL0    0x0C
+#define FREQ2      0x0D
+#define FREQ1      0x0E
+#define FREQ0      0x0F
+#define MDMCFG4    0x10
+#define MDMCFG3    0x11
+#define MDMCFG2    0x12
+#define MDMCFG1    0x13
+#define MDMCFG0    0x14
+#define DEVIATN    0x15
+#define MCSM2      0x16
+#define MCSM1      0x17
+#define MCSM0      0x18
+#define FOCCFG     0x19
+#define BSCFG      0x1A
+#define AGCCTRL2   0x1B
+#define AGCCTRL1   0x1C
+#define AGCCTRL0   0x1D
+#define WOREVT1    0x1E
+#define WOREVT0    0x1F
+#define WORCTRL    0x20
+#define FREND1     0x21
+#define FREND0     0x22
+#define FSCAL3     0x23
+#define FSCAL2     0x24
+#define FSCAL1     0x25
+#define FSCAL0     0x26
+#define RCCTRL1    0x27
+#define RCCTRL0    0x28
+#define FSTEST     0x29
+#define PTEST      0x2A
+#define AGCTEST    0x2B
+#define TEST2      0x2C
+#define TEST1      0x2D
+#define TEST0      0x2E
+
+#define CC1101_BURST         0x40
+#define CC1101_READ          0x80
+
+void cc1101_read_cfg(cc1101_cfg_t *c){
+  cc1101_cfg_regs_t r_buffer;
+  uint8_t *r_ptr = (uint8_t *)&r_buffer;
+  uint16_t n, v;
+  uint16_t status = 0;
+  SPI.begin();
+  SPI.beginTransaction(SPISettings(10000000, MSBFIRST, SPI_MODE0));
+  digitalWrite(SS, LOW);
+  /* per cc1101 datasheet, check MISO being low before continueing after CS set LOW */
+  while(digitalRead(MISO)) doYIELD;
+  status = SPI.transfer(n|CC1101_BURST|CC1101_READ);
+  DOLOG("STATUS:"); DOLOGLN(status);
+  for(n=0; n<sizeof(r_buffer); n++){
+    doYIELD;
+    *r_ptr++ = v = SPI.transfer(0);
+    if(cfg.do_verbose){
+      char info_str[25];
+      int r = snprintf((char *)&info_str, 25, "0x%02x=%d", n, v);
+      DOLOGLN(info_str);
+    }
+  }
+  digitalWrite(SS, HIGH);
+  SPI.endTransaction();
+  SPI.end();
+  return;
+}
+
+uint16_t cc1101_spi_addr(uint8_t address, uint8_t value){
+  #ifdef DEBUG
+  Serial.print(address);
+  Serial.print(F(","));
+  Serial.print(value);
+  Serial.print(F(","));
+  Serial.print(value);
+  Serial.println();
+  #endif
+  SPI.beginTransaction(SPISettings(10000000, MSBFIRST, SPI_MODE0));
+  digitalWrite(SS, LOW);
+  /* per cc1101 datasheet, check MISO being low before continuing after CS set LOW */
+  while(digitalRead(MISO)) doYIELD;
+  uint16_t v = SPI.transfer16((address << 8) & value);
+  digitalWrite(SS, HIGH);
+  SPI.endTransaction();
+  return v;
 }
 
