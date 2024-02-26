@@ -970,7 +970,9 @@ inline uint8_t cc1101_cfg(cc1101_cfg_regs_t *c, uint8_t k){
 void cc1101_read_cfg(cc1101_cfg_t *c){
   static cc1101_cfg_regs_t r_buffer;
   cc1101_fetch_cfg((uint8_t*)&r_buffer);
-  FOREACH_F(I_STR)
+  if(cfg.do_verbose){
+    FOREACH_F(I_STR)
+  }
 }
 
 void dolog(const char *format, ...){
