@@ -44,13 +44,14 @@ SerialCommands ATSc(&Serial, atscbu, sizeof(atscbu), "\r\n", "\r\n");
 #define CFGINIT    0x72 // at boot init check flag
 #define CFG_EEPROM 0x00 
 
+#define OUTSTRING_SIZE 512
 #ifdef VERBOSE
  #if defined(ARDUINO_ARCH_ESP8266) || defined(ARDUINO_ARCH_ESP32) || defined(ESP32)
-  #define DOLOG(L)    if(cfg.do_verbose) Serial.print(L);
-  #define DOLOGLN(L)  if(cfg.do_verbose) Serial.println(L);
+  #define DOLOG(L)    if(cfg.do_verbose){Serial.print(L);}
+  #define DOLOGLN(L)  if(cfg.do_verbose){Serial.println(L);}
  #else
-  #define DOLOG(L)    if(cfg.do_verbose) Serial.print(L);
-  #define DOLOGLN(L)  if(cfg.do_verbose) Serial.println(L);
+  #define DOLOG(L)    if(cfg.do_verbose){Serial.print(L);}
+  #define DOLOGLN(L)  if(cfg.do_verbose){Serial.println(L);}
  #endif
 #else
  #define DOLOG(L) 
@@ -608,7 +609,7 @@ void loop(){
     led_last_check = millis();
   }
 
-  if(cc1101_enabled[0]){
+  if(cc1101_enabled[0] && 0){
     if(cfg.cc1101[0].is_sender){
       int buffer_len = strlen((char *)&uart_buffer);
       if(buffer_len > 0){
@@ -709,60 +710,285 @@ void setup_wifi(){
   WiFi.begin(cfg.wifi_ssid, cfg.wifi_pass);
 }
 
-#define IOCFG2     0x00
-#define IOCFG1     0x01
-#define IOCFG0     0x02
-#define FIFOTHR    0x03
-#define SYNC1      0x04
-#define SYNC0      0x05
-#define PKTLEN     0x06
-#define PKTCTRL1   0x07
-#define PKTCTRL0   0x08
-#define ADDR       0x09
-#define CHANNR     0x0A
-#define FSCTRL1    0x0B
-#define FSCTRL0    0x0C
-#define FREQ2      0x0D
-#define FREQ1      0x0E
-#define FREQ0      0x0F
-#define MDMCFG4    0x10
-#define MDMCFG3    0x11
-#define MDMCFG2    0x12
-#define MDMCFG1    0x13
-#define MDMCFG0    0x14
-#define DEVIATN    0x15
-#define MCSM2      0x16
-#define MCSM1      0x17
-#define MCSM0      0x18
-#define FOCCFG     0x19
-#define BSCFG      0x1A
-#define AGCCTRL2   0x1B
-#define AGCCTRL1   0x1C
-#define AGCCTRL0   0x1D
-#define WOREVT1    0x1E
-#define WOREVT0    0x1F
-#define WORCTRL    0x20
-#define FREND1     0x21
-#define FREND0     0x22
-#define FSCAL3     0x23
-#define FSCAL2     0x24
-#define FSCAL1     0x25
-#define FSCAL0     0x26
-#define RCCTRL1    0x27
-#define RCCTRL0    0x28
-#define FSTEST     0x29
-#define PTEST      0x2A
-#define AGCTEST    0x2B
-#define TEST2      0x2C
-#define TEST1      0x2D
-#define TEST0      0x2E
+#define CC1101_IOCFG2     0x00
+#define CC1101_IOCFG1     0x01
+#define CC1101_IOCFG0     0x02
+#define CC1101_FIFOTHR    0x03
+#define CC1101_SYNC1      0x04
+#define CC1101_SYNC0      0x05
+#define CC1101_PKTLEN     0x06
+#define CC1101_PKTCTRL1   0x07
+#define CC1101_PKTCTRL0   0x08
+#define CC1101_ADDR       0x09
+#define CC1101_CHANNR     0x0A
+#define CC1101_FSCTRL1    0x0B
+#define CC1101_FSCTRL0    0x0C
+#define CC1101_FREQ2      0x0D
+#define CC1101_FREQ1      0x0E
+#define CC1101_FREQ0      0x0F
+#define CC1101_MDMCFG4    0x10
+#define CC1101_MDMCFG3    0x11
+#define CC1101_MDMCFG2    0x12
+#define CC1101_MDMCFG1    0x13
+#define CC1101_MDMCFG0    0x14
+#define CC1101_DEVIATN    0x15
+#define CC1101_MCSM2      0x16
+#define CC1101_MCSM1      0x17
+#define CC1101_MCSM0      0x18
+#define CC1101_FOCCFG     0x19
+#define CC1101_BSCFG      0x1A
+#define CC1101_AGCCTRL2   0x1B
+#define CC1101_AGCCTRL1   0x1C
+#define CC1101_AGCCTRL0   0x1D
+#define CC1101_WOREVT1    0x1E
+#define CC1101_WOREVT0    0x1F
+#define CC1101_WORCTRL    0x20
+#define CC1101_FREND1     0x21
+#define CC1101_FREND0     0x22
+#define CC1101_FSCAL3     0x23
+#define CC1101_FSCAL2     0x24
+#define CC1101_FSCAL1     0x25
+#define CC1101_FSCAL0     0x26
+#define CC1101_RCCTRL1    0x27
+#define CC1101_RCCTRL0    0x28
+#define CC1101_FSTEST     0x29
+#define CC1101_PTEST      0x2A
+#define CC1101_AGCTEST    0x2B
+#define CC1101_TEST2      0x2C
+#define CC1101_TEST1      0x2D
+#define CC1101_TEST0      0x2E
+
+#define CC1101_RSSI       0xF4
+
+#define _BIT(v, b, n)        (v & b) >> n
+
+#define CC1101_CFG_V(v, k)                cc1101_cfg(&v, k)
+#define IOCFG2_GDO2_INV(v)                _BIT(cc1101_cfg(&v,CC1101_IOCFG2  ), 0b01000000, 6)
+#define IOCFG2_GDO2_CFG(v)                _BIT(cc1101_cfg(&v,CC1101_IOCFG2  ), 0b00111111, 5)
+#define IOCFG1_GDO1_DS(v)                 _BIT(cc1101_cfg(&v,CC1101_IOCFG1  ), 0b10000000, 7)
+#define IOCFG1_GDO1_INV(v)                _BIT(cc1101_cfg(&v,CC1101_IOCFG1  ), 0b01000000, 6)
+#define IOCFG1_GDO1_CFG(v)                _BIT(cc1101_cfg(&v,CC1101_IOCFG1  ), 0b00111111, 5)
+#define IOCFG0_GDO0_TEMP_SENSOR_ENABLE(v) _BIT(cc1101_cfg(&v,CC1101_IOCFG0  ), 0b10000000, 7)
+#define IOCFG0_GDO0_INV(v)                _BIT(cc1101_cfg(&v,CC1101_IOCFG0  ), 0b01000000, 6)
+#define IOCFG0_GDO0_CFG(v)                _BIT(cc1101_cfg(&v,CC1101_IOCFG0  ), 0b00111111, 5)
+#define FIFOTHR_ADC_RETENTION(v)          _BIT(cc1101_cfg(&v,CC1101_FIFOTHR ), 0b01000000, 6)
+#define FIFOTHR_CLOSE_IN_RX(v)            _BIT(cc1101_cfg(&v,CC1101_FIFOTHR ), 0b00110000, 4)
+#define FIFOTHR_FIFO_THR(v)               _BIT(cc1101_cfg(&v,CC1101_FIFOTHR ), 0b00001111, 0)
+#define SYNC1_SYNC1(v)                    _BIT(cc1101_cfg(&v,CC1101_SYNC1   ), 0b11111111, 0)
+#define SYNC0_SYNC0(v)                    _BIT(cc1101_cfg(&v,CC1101_SYNC0   ), 0b11111111, 0)
+#define PKTLEN_PACKET_LENGTH(v)           _BIT(cc1101_cfg(&v,CC1101_PKTLEN  ), 0b11111111, 0)
+#define PKTCTRL1_PQT(v)                   _BIT(cc1101_cfg(&v,CC1101_PKTCTRL1), 0b11100000, 7)
+#define PKTCTRL1_CRC_AUTOFLUSH(v)         _BIT(cc1101_cfg(&v,CC1101_PKTCTRL1), 0b00001000, 3)
+#define PKTCTRL1_APPEND_STATUS(v)         _BIT(cc1101_cfg(&v,CC1101_PKTCTRL1), 0b00000100, 2)
+#define PKTCTRL1_ADR_CHK(v)               _BIT(cc1101_cfg(&v,CC1101_PKTCTRL1), 0b00000011, 0)
+#define PKTCTRL0_WHITE_DATA(v)            _BIT(cc1101_cfg(&v,CC1101_PKTCTRL0), 0b01000000, 6)
+#define PKTCTRL0_PKT_FORMAT(v)            _BIT(cc1101_cfg(&v,CC1101_PKTCTRL0), 0b00110000, 4)
+#define PKTCTRL0_CRC_EN(v)                _BIT(cc1101_cfg(&v,CC1101_PKTCTRL0), 0b00000100, 2)
+#define PKTCTRL0_LENGTH_CONFIG(v)         _BIT(cc1101_cfg(&v,CC1101_PKTCTRL0), 0b00000011, 0)
+#define ADDR_DEVICE_ADDR(v)               _BIT(cc1101_cfg(&v,CC1101_ADDR),     0b11111111, 0)
+#define CHANNR_CHAN(v)                    _BIT(cc1101_cfg(&v,CC1101_CHANNR),   0b11111111, 0)
+#define FSCTRL1_FREQ_IF(v)                _BIT(cc1101_cfg(&v,CC1101_FSCTRL1 ), 0b00011111, 5)
+#define FSCTRL0_FREQOFF(v)                _BIT(cc1101_cfg(&v,CC1101_FSCTRL0 ), 0b11111111, 0)
+#define FREQ2_FREQ(v)                     _BIT(cc1101_cfg(&v,CC1101_FREQ2   ), 0b00111111, 0)
+#define FREQ1_FREQ(v)                     _BIT(cc1101_cfg(&v,CC1101_FREQ1   ), 0b11111111, 0)
+#define FREQ0_FREQ(v)                     _BIT(cc1101_cfg(&v,CC1101_FREQ0   ), 0b11111111, 0)
+#define MDMCFG4_CHANBW_E(v)               _BIT(cc1101_cfg(&v,CC1101_MDMCFG4 ), 0b11000000, 6)
+#define MDMCFG4_CHANBW_M(v)               _BIT(cc1101_cfg(&v,CC1101_MDMCFG4 ), 0b00110000, 4)
+#define MDMCFG4_DRATE_E(v)                _BIT(cc1101_cfg(&v,CC1101_MDMCFG4 ), 0b00001111, 0)
+#define MDMCFG3_DRATE_M(v)                _BIT(cc1101_cfg(&v,CC1101_MDMCFG3 ), 0b11111111, 0)
+#define MDMCFG2_DEM_DCFILT_OFF(v)         _BIT(cc1101_cfg(&v,CC1101_MDMCFG2 ), 0b10000000, 7)
+#define MDMCFG2_MOD_FORMAT(v)             _BIT(cc1101_cfg(&v,CC1101_MDMCFG2 ), 0b01110000, 4)
+#define MDMCFG2_MANCHESTER_EN(v)          _BIT(cc1101_cfg(&v,CC1101_MDMCFG2 ), 0b00001000, 3)
+#define MDMCFG2_SYNC_MODE(v)              _BIT(cc1101_cfg(&v,CC1101_MDMCFG2 ), 0b00000111, 0)
+#define MDMCFG1_FEC_EN(v)                 _BIT(cc1101_cfg(&v,CC1101_MDMCFG1 ), 0b10000000, 7)
+#define MDMCFG1_NUM_PREAMPLE(v)           _BIT(cc1101_cfg(&v,CC1101_MDMCFG1 ), 0b01110000, 4)
+#define MDMCFG1_CHANSPC_E(v)              _BIT(cc1101_cfg(&v,CC1101_MDMCFG1 ), 0b00000011, 0)
+#define MDMCFG0_CHANSPC_M(v)              _BIT(cc1101_cfg(&v,CC1101_MDMCFG0 ), 0b11111111, 0)
+#define DEVIATN_DEVIATION_E(v)            _BIT(cc1101_cfg(&v,CC1101_DEVIATN ), 0b01110000, 4)
+#define DEVIATN_DEVIATION_M(v)            _BIT(cc1101_cfg(&v,CC1101_DEVIATN ), 0b00000111, 0)
+#define MCSM2_RX_TIME_RSSI(v)             _BIT(cc1101_cfg(&v,CC1101_MCSM2   ), 0b00010000, 4)
+#define MCSM2_RX_TIME_QUAL(v)             _BIT(cc1101_cfg(&v,CC1101_MCSM2   ), 0b00001000, 3)
+#define MCSM2_RX_TIME(v)                  _BIT(cc1101_cfg(&v,CC1101_MCSM2   ), 0b00000111, 0)
+#define MCSM1_CCA_MODE(v)                 _BIT(cc1101_cfg(&v,CC1101_MCSM1   ), 0b00110000, 4)
+#define MCSM1_RXOFF_MODE(v)               _BIT(cc1101_cfg(&v,CC1101_MCSM1   ), 0b00001100, 2)
+#define MCSM1_TXOFF_MODE(v)               _BIT(cc1101_cfg(&v,CC1101_MCSM1   ), 0b00000011, 0)
+#define MCSM0_FS_AUTOCAL(v)               _BIT(cc1101_cfg(&v,CC1101_MCSM0   ), 0b00110000, 4)
+#define MCSM0_PO_TIMEOUT(v)               _BIT(cc1101_cfg(&v,CC1101_MCSM0   ), 0b00001100, 2)
+#define MCSM0_PIN_CTRL_EN(v)              _BIT(cc1101_cfg(&v,CC1101_MCSM0   ), 0b00000010, 1)
+#define MCSM0_XOSC_FORCE_ON(v)            _BIT(cc1101_cfg(&v,CC1101_MCSM0   ), 0b00000001, 0)
+#define FOCCFG_FOC_BS_CS_GATE(v)          _BIT(cc1101_cfg(&v,CC1101_FOCCFG  ), 0b00100000, 5)
+#define FOCCFG_FOC_PRE_K(v)               _BIT(cc1101_cfg(&v,CC1101_FOCCFG  ), 0b00011000, 3)
+#define FOCCFG_FOC_POST_K(v)              _BIT(cc1101_cfg(&v,CC1101_FOCCFG  ), 0b00000100, 2)
+#define FOCCFG_FOC_LIMIT(v)               _BIT(cc1101_cfg(&v,CC1101_FOCCFG  ), 0b00000011, 0)
+#define BSCFG_BS_PRE_K(v)                 _BIT(cc1101_cfg(&v,CC1101_BSCFG   ), 0b11000000, 6)
+#define BSCFG_BS_PRE_KP(v)                _BIT(cc1101_cfg(&v,CC1101_BSCFG   ), 0b00110000, 4)
+#define BSCFG_BS_POST_KI(v)               _BIT(cc1101_cfg(&v,CC1101_BSCFG   ), 0b00001000, 3)
+#define BSCFG_BS_POST_KP(v)               _BIT(cc1101_cfg(&v,CC1101_BSCFG   ), 0b00000100, 2)
+#define BSCFG_BS_LIMIT(v)                 _BIT(cc1101_cfg(&v,CC1101_BSCFG   ), 0b00000011, 0)
+#define AGCCTRL2_MAX_DVGA_GAIN(v)         _BIT(cc1101_cfg(&v,CC1101_AGCCTRL2), 0b11000000, 6)
+#define AGCCTRL2_MAX_LNA_GAIN(v)          _BIT(cc1101_cfg(&v,CC1101_AGCCTRL2), 0b00111000, 3)
+#define AGCCTRL2_MAGN_TARGET(v)           _BIT(cc1101_cfg(&v,CC1101_AGCCTRL2), 0b00000111, 0)
+#define AGCCTRL1_AGC_LNA_PRIORITY(v)      _BIT(cc1101_cfg(&v,CC1101_AGCCTRL1), 0b01000000, 6)
+#define AGCCTRL1_CARRIER_SENSE_REL_THR(v) _BIT(cc1101_cfg(&v,CC1101_AGCCTRL1), 0b00110000, 4)
+#define AGCCTRL1_CARRIER_SENSE_ABS_THR(v) _BIT(cc1101_cfg(&v,CC1101_AGCCTRL1), 0b00001111, 0)
+#define AGCCTRL0_HYST_LEVEL(v)            _BIT(cc1101_cfg(&v,CC1101_AGCCTRL0), 0b11000000, 6)
+#define AGCCTRL0_WAIT_TIME(v)             _BIT(cc1101_cfg(&v,CC1101_AGCCTRL0), 0b00110000, 4)
+#define AGCCTRL0_AGC_FREEZE(v)            _BIT(cc1101_cfg(&v,CC1101_AGCCTRL0), 0b00001100, 2)
+#define AGCCTRL0_FILTER_LENGTH(v)         _BIT(cc1101_cfg(&v,CC1101_AGCCTRL0), 0b00000011, 0)
+#define WOREVT1_EVENT0(v)                 _BIT(cc1101_cfg(&v,CC1101_WOREVT1),  0b11111111, 0)
+#define WOREVT0_EVENT0(v)                 _BIT(cc1101_cfg(&v,CC1101_WOREVT0),  0b11111111, 0)
+#define WORCTRL_RC_PD(v)                  _BIT(cc1101_cfg(&v,CC1101_WORCTRL),  0b10000000, 7)
+#define WORCTRL_EVENT1(v)                 _BIT(cc1101_cfg(&v,CC1101_WORCTRL),  0b01110000, 4)
+#define WORCTRL_RC_CAL(v)                 _BIT(cc1101_cfg(&v,CC1101_WORCTRL),  0b00001000, 3)
+#define WORCTRL_WOR_RES(v)                _BIT(cc1101_cfg(&v,CC1101_WORCTRL),  0b00000011, 0)
+#define FREND1_LNA_CURRENT(v)             _BIT(cc1101_cfg(&v,CC1101_FREND1),   0b11000000, 6)
+#define FREND1_LNA2MIX_CURRENT(v)         _BIT(cc1101_cfg(&v,CC1101_FREND1),   0b00110000, 4)
+#define FREND1_LODIV_BUF_CURRENT(v)       _BIT(cc1101_cfg(&v,CC1101_FREND1),   0b00001100, 2)
+#define FREND1_MIX_CURRENT(v)             _BIT(cc1101_cfg(&v,CC1101_FREND1),   0b00000011, 0)
+#define FREND0_LODIV_BUF_CURRENT_TX(v)    _BIT(cc1101_cfg(&v,CC1101_FREND0),   0b00110000, 4)
+#define FREND0_PA_POWER(v)                _BIT(cc1101_cfg(&v,CC1101_FREND0),   0b00000111, 0)
+#define FSCAL3_FSCAL3(v)                  _BIT(cc1101_cfg(&v,CC1101_FSCAL3),   0b11000000, 6)
+#define FSCAL3_CHP_CURR_CAL_EN(v)         _BIT(cc1101_cfg(&v,CC1101_FSCAL3),   0b00110000, 4)
+#define FSCAL3_FSCAL3_2(v)                _BIT(cc1101_cfg(&v,CC1101_FSCAL3),   0b00001111, 0)
+#define FSCAL2_VCO_CORE_H_EN(v)           _BIT(cc1101_cfg(&v,CC1101_FSCAL2),   0b00100000, 5)
+#define FSCAL2_FSCAL2(v)                  _BIT(cc1101_cfg(&v,CC1101_FSCAL2),   0b00011111, 4)
+#define FSCAL1_FSCAL1(v)                  _BIT(cc1101_cfg(&v,CC1101_FSCAL1),   0b00111111, 0)
+#define FSCAL0_FSCAL0(v)                  _BIT(cc1101_cfg(&v,CC1101_FSCAL0),   0b01111111, 0)
+#define RCCTRL1_RCCTRL1(v)                _BIT(cc1101_cfg(&v,CC1101_RCCTRL1),  0b01111111, 0)
+#define RCCTRL0_RCCTRL0(v)                _BIT(cc1101_cfg(&v,CC1101_RCCTRL0),  0b01111111, 0)
+
+#define G_CC1101_CFG(v)  v,
+#define G_CC1101_STR(v)  #v,
+#define FOREACH_F(F) \
+  F(IOCFG2_GDO2_INV)                \
+  F(IOCFG2_GDO2_CFG)                \
+  F(IOCFG1_GDO1_DS)                 \
+  F(IOCFG1_GDO1_INV)                \
+  F(IOCFG1_GDO1_CFG)                \
+  F(IOCFG0_GDO0_TEMP_SENSOR_ENABLE) \
+  F(IOCFG0_GDO0_INV)                \
+  F(IOCFG0_GDO0_CFG)                \
+  F(FIFOTHR_ADC_RETENTION)          \
+  F(FIFOTHR_CLOSE_IN_RX)            \
+  F(FIFOTHR_FIFO_THR)               \
+  F(SYNC1_SYNC1)                    \
+  F(SYNC0_SYNC0)                    \
+  F(PKTLEN_PACKET_LENGTH)           \
+  F(PKTCTRL1_PQT)                   \
+  F(PKTCTRL1_CRC_AUTOFLUSH)         \
+  F(PKTCTRL1_APPEND_STATUS)         \
+  F(PKTCTRL1_ADR_CHK)               \
+  F(PKTCTRL0_WHITE_DATA)            \
+  F(PKTCTRL0_PKT_FORMAT)            \
+  F(PKTCTRL0_CRC_EN)                \
+  F(PKTCTRL0_LENGTH_CONFIG)         \
+  F(ADDR_DEVICE_ADDR)               \
+  F(CHANNR_CHAN)                    \
+  F(FSCTRL1_FREQ_IF)                \
+  F(FSCTRL0_FREQOFF)                \
+  F(FREQ2_FREQ)                     \
+  F(FREQ1_FREQ)                     \
+  F(FREQ0_FREQ)                     \
+  F(MDMCFG4_CHANBW_E)               \
+  F(MDMCFG4_CHANBW_M)               \
+  F(MDMCFG4_DRATE_E)                \
+  F(MDMCFG3_DRATE_M)                \
+  F(MDMCFG2_DEM_DCFILT_OFF)         \
+  F(MDMCFG2_MOD_FORMAT)             \
+  F(MDMCFG2_MANCHESTER_EN)          \
+  F(MDMCFG2_SYNC_MODE)              \
+  F(MDMCFG1_FEC_EN)                 \
+  F(MDMCFG1_NUM_PREAMPLE)           \
+  F(MDMCFG1_CHANSPC_E)              \
+  F(MDMCFG0_CHANSPC_M)              \
+  F(DEVIATN_DEVIATION_E)            \
+  F(DEVIATN_DEVIATION_M)            \
+  F(MCSM2_RX_TIME_RSSI)             \
+  F(MCSM2_RX_TIME_QUAL)             \
+  F(MCSM2_RX_TIME)                  \
+  F(MCSM1_CCA_MODE)                 \
+  F(MCSM1_RXOFF_MODE)               \
+  F(MCSM1_TXOFF_MODE)               \
+  F(MCSM0_FS_AUTOCAL)               \
+  F(MCSM0_PO_TIMEOUT)               \
+  F(MCSM0_PIN_CTRL_EN)              \
+  F(MCSM0_XOSC_FORCE_ON)            \
+  F(FOCCFG_FOC_BS_CS_GATE)          \
+  F(FOCCFG_FOC_PRE_K)               \
+  F(FOCCFG_FOC_POST_K)              \
+  F(FOCCFG_FOC_LIMIT)               \
+  F(BSCFG_BS_PRE_K)                 \
+  F(BSCFG_BS_PRE_KP)                \
+  F(BSCFG_BS_POST_KI)               \
+  F(BSCFG_BS_POST_KP)               \
+  F(BSCFG_BS_LIMIT)                 \
+  F(AGCCTRL2_MAX_DVGA_GAIN)         \
+  F(AGCCTRL2_MAX_LNA_GAIN)          \
+  F(AGCCTRL2_MAGN_TARGET)           \
+  F(AGCCTRL1_AGC_LNA_PRIORITY)      \
+  F(AGCCTRL1_CARRIER_SENSE_REL_THR) \
+  F(AGCCTRL1_CARRIER_SENSE_ABS_THR) \
+  F(AGCCTRL0_HYST_LEVEL)            \
+  F(AGCCTRL0_WAIT_TIME)             \
+  F(AGCCTRL0_AGC_FREEZE)            \
+  F(AGCCTRL0_FILTER_LENGTH)         \
+  F(WOREVT1_EVENT0)                 \
+  F(WOREVT0_EVENT0)                 \
+  F(WORCTRL_RC_PD)                  \
+  F(WORCTRL_EVENT1)                 \
+  F(WORCTRL_RC_CAL)                 \
+  F(WORCTRL_WOR_RES)                \
+  F(FREND1_LNA_CURRENT)             \
+  F(FREND1_LNA2MIX_CURRENT)         \
+  F(FREND1_LODIV_BUF_CURRENT)       \
+  F(FREND1_MIX_CURRENT)             \
+  F(FREND0_LODIV_BUF_CURRENT_TX)    \
+  F(FREND0_PA_POWER)                \
+  F(FSCAL3_FSCAL3)                  \
+  F(FSCAL3_CHP_CURR_CAL_EN)         \
+  F(FSCAL3_FSCAL3_2)                \
+  F(FSCAL2_VCO_CORE_H_EN)           \
+  F(FSCAL2_FSCAL2)                  \
+  F(FSCAL1_FSCAL1)                  \
+  F(FSCAL0_FSCAL0)                  \
+  F(RCCTRL1_RCCTRL1)                \
+  F(RCCTRL0_RCCTRL0)
+
+#define I_STR(v) dolog("%s=%d\n",#v, v(r_buffer));
+
+#define RSSI(v)                           _BIT(cc1101_cfg(&v,CC1101_RSSI), 0b11111111, 0)
 
 #define CC1101_BURST         0x40
 #define CC1101_READ          0x80
+#define CC1101_READ_CFG(c,k) cc1101_cfg(&c,k)
+#define CC1101_READ_CFG(c,k,s) cc1101_cfg(&c,k)
+
+inline uint8_t cc1101_cfg(cc1101_cfg_regs_t *c, uint8_t k){
+  return *(((uint8_t *)c)+k);
+}
 
 void cc1101_read_cfg(cc1101_cfg_t *c){
-  cc1101_cfg_regs_t r_buffer;
-  uint8_t *r_ptr = (uint8_t *)&r_buffer;
+  static cc1101_cfg_regs_t r_buffer;
+  cc1101_fetch_cfg((uint8_t*)&r_buffer);
+  FOREACH_F(I_STR)
+}
+
+void dolog(const char *format, ...){
+  char outstr[OUTSTRING_SIZE];
+  memset((void *)&outstr, 0, OUTSTRING_SIZE);
+  va_list v_args;
+  va_start(v_args, format); 
+  int r = vsnprintf((char *)&outstr, OUTSTRING_SIZE, format, v_args);
+  va_end(v_args);
+  if(r>0 && r<OUTSTRING_SIZE){
+    DOLOG(outstr);
+  } else {
+    DOLOG("LOG R:");
+    DOLOGLN(r);
+  }
+}
+
+void cc1101_fetch_cfg(uint8_t *r_buffer){
   uint16_t n, v;
   uint16_t status = 0;
   SPI.begin();
@@ -772,9 +998,9 @@ void cc1101_read_cfg(cc1101_cfg_t *c){
   while(digitalRead(MISO)) doYIELD;
   status = SPI.transfer(n|CC1101_BURST|CC1101_READ);
   DOLOG("STATUS:"); DOLOGLN(status);
-  for(n=0; n<sizeof(r_buffer); n++){
+  for(n=0; n < 0x2e + 1; n++){
     doYIELD;
-    *r_ptr++ = v = SPI.transfer(0);
+    *r_buffer++ = v = SPI.transfer(0);
     if(cfg.do_verbose){
       char info_str[25];
       int r = snprintf((char *)&info_str, 25, "0x%02x=%d", n, v);
@@ -784,7 +1010,6 @@ void cc1101_read_cfg(cc1101_cfg_t *c){
   digitalWrite(SS, HIGH);
   SPI.endTransaction();
   SPI.end();
-  return;
 }
 
 uint16_t cc1101_spi_addr(uint8_t address, uint8_t value){
