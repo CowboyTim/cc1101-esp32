@@ -122,6 +122,7 @@ an error, not `AT+DEBUG=1`.
 | `AT+VERBOSE=0\|1`, `AT+VERBOSE?` | `OK` / value | Only in `VERBOSE` builds |
 | `AT+DEBUG=0\|1`, `AT+DEBUG?` | `OK` / value | Only in `DEBUG` builds |
 | `AT+CC1101=<27 fields>` | `OK` | Radio config, see below. Saves to EEPROM only if it changed. |
+| `AT+SCAN=<start_mhz>,<stop_mhz>,<step_khz>` | `SCAN <mhz> <rssi>` per step, then `OK` | Receive-only RSSI scan (dBm). 300–928 MHz, step 10–1000 kHz, at most 2000 steps. Needs the CC1101 to be found. The saved radio config is re-applied afterwards. Example: `AT+SCAN=863,870,100` |
 | `AT+RESET` | `OK`, then reboot | Restarts the board |
 
 Any other `AT+...` command returns `ERROR unkown AT command`. Lines that do not

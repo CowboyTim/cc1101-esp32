@@ -192,6 +192,8 @@ unsigned long last_logline         = 0;
 uint8_t led_status                 = 0;
 unsigned long last_cc1101_check[1] = {0};
 #define CC1101_MAX_PAYLOAD 64 /* CC1101 TX/RX FIFO size; longer packets are not supported */
+#define CC1101_SCAN_MAX_STEPS 2000 /* AT+SCAN: most frequencies one command may step through */
+#define CC1101_SCAN_SETTLE_MS 5    /* AT+SCAN: wait after SetRx() before reading RSSI */
 char uart_buffer[128] = {0};
 byte in_buffer[256]   = {0};
 
@@ -454,6 +456,45 @@ void at_cmd_handler(SerialCommands* s, const char* atcmdline){
       s->GetSerial()->println(F("ntp synced"));
     else
       s->GetSerial()->println(F("not ntp synced"));
+    return;
+  } else if(p = at_cmd_check("AT+SCAN=", atcmdline, cmd_len)){
+    /* AT+SCAN=<start_mhz>,<stop_mhz>,<step_khz>: print RSSI per frequency, receive only.
+       The radio config is re-applied afterwards (cc1101_changed), which resets the frequency. */
+    if(!cc1101_enabled[0]){
+      s->GetSerial()->println(F("ERROR no cc1101"));
+      return;
+    }
+    double v[3];
+    if(sscanf(p, "%lf,%lf,%lf", &v[0], &v[1], &v[2]) != 3){
+      s->GetSerial()->println(F("ERROR AT+SCAN=start_mhz,stop_mhz,step_khz"));
+      return;
+    }
+    if(!(   v[0] >= 300 && v[0] <= 928      /* CC1101 range */
+         && v[1] >= 300 && v[1] <= 928
+         && v[0] <= v[1]
+         && cc1101_int_in(v[2], 10, 1000))){  /* whole kHz steps */
+      s->GetSerial()->println(F("ERROR scan range: 300-928 MHz, start <= stop, step 10-1000 kHz"));
+      return;
+    }
+    double steps = floor((v[1] - v[0]) * 1000.0 / v[2]) + 1;
+    if(steps > CC1101_SCAN_MAX_STEPS){
+      s->GetSerial()->println(F("ERROR too many steps, max 2000"));
+      return;
+    }
+    for(int i = 0; i < (int)steps; i++){
+      double f = v[0] + i * v[2] / 1000.0;
+      /* SetRx(float) idles, sets the frequency (calibrates) and enters RX */
+      ELECHOUSE_cc1101.SetRx((float)f);
+      delay(CC1101_SCAN_SETTLE_MS);
+      s->GetSerial()->print(F("SCAN "));
+      s->GetSerial()->print(f, 3);
+      s->GetSerial()->print(F(" "));
+      s->GetSerial()->println(ELECHOUSE_cc1101.getRssi());
+      doYIELD;
+    }
+    /* loop() re-applies the saved config (frequency, sender idle/receiver RX) */
+    cc1101_changed[0] = 1;
+    s->GetSerial()->println(F("OK"));
     return;
   } else if(p = at_cmd_check("AT+RESET", atcmdline, cmd_len)){
     s->GetSerial()->println(F("OK"));
