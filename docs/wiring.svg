@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 560" width="800" height="560" font-family="Helvetica, Arial, sans-serif">
+  <title>cc1101-esp32 wiring: ESP32-C3 to CC1101</title>
+  <desc>Wires between an ESP32-C3 board and a CC1101 module over SPI, plus GDO0. Default ESP32-C3 SPI pins as in the Arduino core: SCK GPIO4, MISO GPIO5, MOSI GPIO6, SS GPIO7.</desc>
+
+  <!-- background -->
+  <rect x="0" y="0" width="800" height="560" fill="#ffffff"/>
+
+  <text x="400" y="34" text-anchor="middle" font-size="20" font-weight="bold" fill="#222">cc1101-esp32: ESP32-C3 to CC1101 wiring</text>
+
+  <!-- ESP32-C3 box -->
+  <rect x="60" y="60" width="240" height="380" rx="8" fill="#f4f7fb" stroke="#4a6fa5" stroke-width="2"/>
+  <text x="180" y="90" text-anchor="middle" font-size="15" font-weight="bold" fill="#222">ESP32-C3</text>
+  <text x="180" y="108" text-anchor="middle" font-size="12" fill="#555">sender or receiver board</text>
+
+  <!-- CC1101 box -->
+  <rect x="500" y="60" width="240" height="380" rx="8" fill="#f7f4fb" stroke="#7a4aa5" stroke-width="2"/>
+  <text x="620" y="90" text-anchor="middle" font-size="15" font-weight="bold" fill="#222">CC1101 module</text>
+  <text x="620" y="108" text-anchor="middle" font-size="12" fill="#555">315/433/868/915 MHz</text>
+
+  <!-- power: 3V3 and GND -->
+  <line x1="300" y1="130" x2="500" y2="130" stroke="#c0392b" stroke-width="3"/>
+  <line x1="300" y1="160" x2="500" y2="160" stroke="#222" stroke-width="3"/>
+
+  <!-- SPI -->
+  <line x1="300" y1="200" x2="500" y2="200" stroke="#2e6fbf" stroke-width="3"/>
+  <line x1="300" y1="230" x2="500" y2="230" stroke="#2e6fbf" stroke-width="3"/>
+  <line x1="300" y1="260" x2="500" y2="260" stroke="#2e6fbf" stroke-width="3"/>
+  <line x1="300" y1="290" x2="500" y2="290" stroke="#2e6fbf" stroke-width="3"/>
+
+  <!-- GDO0 (interrupt/sync line, input on the ESP32) -->
+  <line x1="300" y1="340" x2="500" y2="340" stroke="#2e8b57" stroke-width="3"/>
+
+  <!-- GDO2 not used -->
+  <line x1="500" y1="380" x2="470" y2="380" stroke="#999" stroke-width="2" stroke-dasharray="5,4"/>
+  <text x="464" y="384" text-anchor="end" font-size="12" fill="#777">not connected</text>
+
+  <!-- ESP32 pin labels (inside box, right edge) -->
+  <g font-size="13" fill="#222" text-anchor="end">
+    <text x="290" y="135">3V3</text>
+    <text x="290" y="165">GND</text>
+    <text x="290" y="205">GPIO4  SCK</text>
+    <text x="290" y="235">GPIO5  MISO</text>
+    <text x="290" y="265">GPIO6  MOSI</text>
+    <text x="290" y="295">GPIO7  SS (CSn)</text>
+    <text x="290" y="345">GPIO0  GDO0</text>
+  </g>
+
+  <!-- CC1101 pin labels (inside box, left edge) -->
+  <g font-size="13" fill="#222" text-anchor="start">
+    <text x="512" y="135">VCC</text>
+    <text x="512" y="165">GND</text>
+    <text x="512" y="205">SCK</text>
+    <text x="512" y="235">SO (MISO)</text>
+    <text x="512" y="265">SI (MOSI)</text>
+    <text x="512" y="295">CSN</text>
+    <text x="512" y="345">GDO0</text>
+    <text x="512" y="385">GDO2</text>
+  </g>
+
+  <!-- antenna -->
+  <line x1="620" y1="440" x2="620" y2="478" stroke="#222" stroke-width="3"/>
+  <circle cx="620" cy="482" r="4" fill="#222"/>
+  <text x="620" y="500" text-anchor="middle" font-size="12" fill="#444">antenna matched to the band (MHz)</text>
+
+  <!-- notes -->
+  <g font-size="12" fill="#444">
+    <text x="60" y="530">Everything is 3.3 V logic. The CC1101 is not 5 V tolerant, so do not connect it to 5 V.</text>
+    <text x="60" y="547">SPI pins and GDO0 are set in the sketch (GDO0 = CC1101_GDO0_PIN). Keep the wires short.</text>
+  </g>
+</svg>
