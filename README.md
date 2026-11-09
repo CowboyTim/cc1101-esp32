@@ -14,6 +14,7 @@ NTP server, radio settings) is stored in EEPROM and survives reboots.
 | Path | What it is |
 | --- | --- |
 | `cc1101-esp32/cc1101-esp32.ino` | The sketch: AT command handler, config in EEPROM, CC1101 setup, SPI register access |
+| `docs/wiring.svg` | Wiring schematic, ESP32-C3 to CC1101 |
 | `deploy.py` | Build, flash, configure and monitor the boards |
 | `boards.toml` | The boards (name, chip, role, MAC) and the radio settings |
 | `AGENTS.md` | Guidance for contributors and coding agents |
@@ -26,6 +27,14 @@ NTP server, radio settings) is stored in EEPROM and survives reboots.
 - Libraries, also installed by `setup`:
   - `SerialCommands`
   - `SmartRC-CC1101-Driver-Lib` (provides `ELECHOUSE_cc1101`)
+
+## Wiring
+
+![ESP32-C3 to CC1101 wiring](docs/wiring.svg)
+
+Power the CC1101 from the board's 3V3 pin, not 5 V. The SPI pins (GPIO4 SCK,
+GPIO5 MISO, GPIO6 MOSI, GPIO7 SS) are the ESP32-C3 defaults. GDO0 is on GPIO0.
+GDO2 is not used.
 
 ## Boards
 
