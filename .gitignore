@@ -4,3 +4,7 @@
 .*~
 .sw?
 dist/
+# CocoIndex Code (ccc)
+/.cocoindex_code/
+__pycache__/
+/cc1101-esp32/build/
