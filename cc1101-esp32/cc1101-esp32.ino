@@ -17,12 +17,10 @@
 #define LED_BUILTIN 8
 #define LED LED_BUILTIN
 
-#ifndef VERBOSE
-#define VERBOSE
-#endif
-#ifndef DEBUG
-#define DEBUG
-#endif
+/* CC1101 GDO0 is read as an input (packet sync / end of packet). GDO2 is not used. */
+#define CC1101_GDO0_PIN 0
+
+/* VERBOSE and DEBUG are enabled by build.sh (-DVERBOSE / -DDEBUG), not forced here */
 
 /* NTP server to use, can be configured later on via AT commands */
 #ifndef DEFAULT_NTP_SERVER
@@ -70,7 +68,7 @@ typedef struct cc1101_cfg_t {
   double Chsp;
   double RxBW;
   double DRate;
-  uint8_t PA;
+  int8_t PA;
   uint8_t SyncMode;
   uint8_t SyncWord1;
   uint8_t SyncWord2;
@@ -140,6 +138,36 @@ typedef struct cc1101_cfg_regs_t {
   uint8_t TEST0      ;
 };
 
+#define CC1101_CFG_FIELDS 27
+
+/* range helpers for parsed AT values (parsed as double, so non-integers are rejected) */
+static bool cc1101_int_in(double v, int lo, int hi){
+  return v >= lo && v <= hi && v == (double)(int)v;
+}
+static bool cc1101_pa_ok(double pa){
+  static const int pa_tbl[] = {-30,-20,-15,-10,-6,0,5,7,10,11,12};
+  for(size_t i = 0; i < sizeof(pa_tbl)/sizeof(pa_tbl[0]); i++){
+    if(pa == pa_tbl[i]) return true;
+  }
+  return false;
+}
+/* field-wise compare: memcmp() also compares struct padding, which is not set consistently */
+static bool cc1101_cfg_equal(const cc1101_cfg_t *a, const cc1101_cfg_t *b){
+  return a->is_sender == b->is_sender && a->CCMode == b->CCMode
+      && a->Modulation == b->Modulation && a->MHz == b->MHz
+      && a->Deviation == b->Deviation && a->Channel == b->Channel
+      && a->Chsp == b->Chsp && a->RxBW == b->RxBW && a->DRate == b->DRate
+      && a->PA == b->PA && a->SyncMode == b->SyncMode
+      && a->SyncWord1 == b->SyncWord1 && a->SyncWord2 == b->SyncWord2
+      && a->AdrChk == b->AdrChk && a->Addr == b->Addr
+      && a->WhiteData == b->WhiteData && a->PktFormat == b->PktFormat
+      && a->LengthConfig == b->LengthConfig && a->PacketLength == b->PacketLength
+      && a->Crc == b->Crc && a->CRC_AF == b->CRC_AF
+      && a->DcFilterOff == b->DcFilterOff && a->Manchester == b->Manchester
+      && a->FEC == b->FEC && a->PRE == b->PRE && a->PQT == b->PQT
+      && a->AppendStatus == b->AppendStatus;
+}
+
 /* main config */
 typedef struct cfg_t {
   uint8_t initialized  = 0;
@@ -153,7 +181,7 @@ typedef struct cfg_t {
 };
 cfg_t cfg;
 
-uint8_t ntp_is_synced              = 1;
+uint8_t ntp_is_synced              = 0;
 uint8_t logged_wifi_status         = 0;
 uint8_t cc1101_enabled[1]          = {0};
 uint8_t cc1101_changed[1]          = {0};
@@ -163,19 +191,25 @@ unsigned long led_last_check       = 0;
 unsigned long last_logline         = 0;
 uint8_t led_status                 = 0;
 unsigned long last_cc1101_check[1] = {0};
+#define CC1101_MAX_PAYLOAD 64 /* CC1101 TX/RX FIFO size; longer packets are not supported */
 char uart_buffer[128] = {0};
-byte in_buffer[128]   = {0};
-void(* resetFunc)(void) = 0;
+byte in_buffer[256]   = {0};
+
+/* ntp_start(): (re)start SNTP for the configured host, ntp_is_synced is 0 until it completes */
+void ntp_start(){
+  ntp_is_synced = 0;
+  configTime(0, 0, (char *)&cfg.ntp_host);
+}
 
 char* at_cmd_check(const char *cmd, const char *at_cmd, unsigned short at_len){
-  unsigned short l = strlen(cmd); /* AT+<cmd>=, or AT, or AT+<cmd>? */
-  if(at_len >= l && strncmp(cmd, at_cmd, l) == 0){
-    if(*(cmd+l-1) == '='){
-      return (char *)at_cmd+l;
-    } else {
-      return (char *)at_cmd;
-    }
+  unsigned short l = strlen(cmd);
+  if(at_len < l || strncmp(cmd, at_cmd, l) != 0)
+    return NULL;
+  if(*(cmd+l-1) == '='){
+    return (char *)at_cmd+l;      /* "AT+X=" takes a value after it */
   }
+  if(at_len == l)                 /* "AT", "AT+X?", "AT+X=1": must match exactly */
+    return (char *)at_cmd;
   return NULL;
 }
 
@@ -192,38 +226,36 @@ void at_cmd_handler(SerialCommands* s, const char* atcmdline){
   #endif
   if(cmd_len == 2 && (p = at_cmd_check("AT", atcmdline, cmd_len))){
   } else if(p = at_cmd_check("AT+WIFI_SSID=", atcmdline, cmd_len)){
-    size_t sz = (atcmdline+cmd_len)-p+1;
-    if(sz > 31){
+    size_t len = strlen(p);
+    if(len > 31){
       s->GetSerial()->println(F("WiFI SSID max 31 chars"));
       s->GetSerial()->println(F("ERROR"));
       return;
     }
-    strncpy((char *)&cfg.wifi_ssid, p, sz);
+    memset((char *)&cfg.wifi_ssid, 0, sizeof(cfg.wifi_ssid));
+    memcpy((char *)&cfg.wifi_ssid, p, len);
     EEPROM.put(CFG_EEPROM, cfg);
     EEPROM.commit();
     WiFi.disconnect();
     setup_wifi();
-    configTime(0, 0, (char *)&cfg.ntp_host);
+    ntp_start();
   } else if(p = at_cmd_check("AT+WIFI_SSID?", atcmdline, cmd_len)){
     s->GetSerial()->println(cfg.wifi_ssid);
     return;
   } else if(p = at_cmd_check("AT+WIFI_PASS=", atcmdline, cmd_len)){
-    size_t sz = (atcmdline+cmd_len)-p+1;
-    if(sz > 63){
+    size_t len = strlen(p);
+    if(len > 63){
       s->GetSerial()->println(F("WiFI password max 63 chars"));
       s->GetSerial()->println(F("ERROR"));
       return;
     }
-    strncpy((char *)&cfg.wifi_pass, p, sz);
+    memset((char *)&cfg.wifi_pass, 0, sizeof(cfg.wifi_pass));
+    memcpy((char *)&cfg.wifi_pass, p, len);
     EEPROM.put(CFG_EEPROM, cfg);
     EEPROM.commit();
     WiFi.disconnect();
     setup_wifi();
-    configTime(0, 0, (char *)&cfg.ntp_host);
-  #ifdef DEBUG
-  } else if(p = at_cmd_check("AT+WIFI_PASS?", atcmdline, cmd_len)){
-    s->GetSerial()->println(cfg.wifi_pass);
-  #endif
+    ntp_start();
   #ifdef DEBUG
   } else if(p = at_cmd_check("AT+DEBUG=1", atcmdline, cmd_len)){
     cfg.do_debug = 1;
@@ -283,110 +315,137 @@ void at_cmd_handler(SerialCommands* s, const char* atcmdline){
     }
     DOLOGLN(F("GOT CFG 2:"));
     DOLOGLN(p);
-    /* parse/check the cc1101 cfg */
-    cc1101_cfg_t tmp_cc1101_cf;
-    int r = sscanf(p, "%d,%d,%d,%lf,%lf,%d,%lf,%lf,%lf,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d",
-        &tmp_cc1101_cf.is_sender,
-        &tmp_cc1101_cf.CCMode,
-        &tmp_cc1101_cf.Modulation,
-        &tmp_cc1101_cf.MHz,
-        &tmp_cc1101_cf.Deviation,
-        &tmp_cc1101_cf.Channel,
-        &tmp_cc1101_cf.Chsp,
-        &tmp_cc1101_cf.RxBW,
-        &tmp_cc1101_cf.DRate,
-        &tmp_cc1101_cf.PA,
-        &tmp_cc1101_cf.SyncMode,
-        &tmp_cc1101_cf.SyncWord1,
-        &tmp_cc1101_cf.SyncWord2,
-        &tmp_cc1101_cf.AdrChk,
-        &tmp_cc1101_cf.Addr,
-        &tmp_cc1101_cf.WhiteData,
-        &tmp_cc1101_cf.PktFormat,
-        &tmp_cc1101_cf.LengthConfig,
-        &tmp_cc1101_cf.PacketLength,
-        &tmp_cc1101_cf.Crc,
-        &tmp_cc1101_cf.CRC_AF,
-        &tmp_cc1101_cf.DcFilterOff,
-        &tmp_cc1101_cf.Manchester,
-        &tmp_cc1101_cf.FEC,
-        &tmp_cc1101_cf.PRE,
-        &tmp_cc1101_cf.PQT,
-        &tmp_cc1101_cf.AppendStatus);
+    /* parse every field as a double: %d into uint8_t fields writes 4 bytes past them.
+       Range checks run on the parsed values before anything is stored. */
+    double v[CC1101_CFG_FIELDS];
+    int r = sscanf(p, "%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf",
+        &v[0],
+        &v[1],
+        &v[2],
+        &v[3],
+        &v[4],
+        &v[5],
+        &v[6],
+        &v[7],
+        &v[8],
+        &v[9],
+        &v[10],
+        &v[11],
+        &v[12],
+        &v[13],
+        &v[14],
+        &v[15],
+        &v[16],
+        &v[17],
+        &v[18],
+        &v[19],
+        &v[20],
+        &v[21],
+        &v[22],
+        &v[23],
+        &v[24],
+        &v[25],
+        &v[26]);
     DOLOG(F("GOT CFG 3: "));
     DOLOGLN(r);
-    if(r == 0){
+    if(r != CC1101_CFG_FIELDS){
       s->GetSerial()->println(F("cc1101 cfg nr fields wrong"));
       s->GetSerial()->println(F("ERROR"));
       return;
     }
     DOLOGLN(F("GOT CFG 4"));
-    if(   (tmp_cc1101_cf.is_sender == 1  || tmp_cc1101_cf.is_sender == 0)
-       && (tmp_cc1101_cf.CCMode == 1     || tmp_cc1101_cf.CCMode == 0)
-       && (tmp_cc1101_cf.Modulation >= 0 || tmp_cc1101_cf.Modulation <= 4)
-       && (tmp_cc1101_cf.Channel >= 0    && tmp_cc1101_cf.Channel <= 255)
-       && (    tmp_cc1101_cf.PA == -30 
-            || tmp_cc1101_cf.PA == -20
-            || tmp_cc1101_cf.PA == -15
-            || tmp_cc1101_cf.PA == -10
-            || tmp_cc1101_cf.PA ==  -6
-            || tmp_cc1101_cf.PA ==   0
-            || tmp_cc1101_cf.PA ==   5
-            || tmp_cc1101_cf.PA ==   7
-            || tmp_cc1101_cf.PA ==  10
-            || tmp_cc1101_cf.PA ==  11
-            || tmp_cc1101_cf.PA ==  12
-       )
-       && (tmp_cc1101_cf.SyncMode >= 0     && tmp_cc1101_cf.SyncMode <= 7)
-       && (tmp_cc1101_cf.SyncWord1 >= 0    && tmp_cc1101_cf.SyncWord1 <= 255)
-       && (tmp_cc1101_cf.SyncWord2 >= 0    && tmp_cc1101_cf.SyncWord2 <= 255)
-       && (tmp_cc1101_cf.AdrChk >= 0       || tmp_cc1101_cf.AdrChk <= 3)
-       && (tmp_cc1101_cf.Addr >= 0         || tmp_cc1101_cf.Addr <= 255)
-       && (tmp_cc1101_cf.WhiteData == 0    || tmp_cc1101_cf.WhiteData <= 1)
-       && (tmp_cc1101_cf.PktFormat >= 0    || tmp_cc1101_cf.PktFormat <= 3)
-       && (tmp_cc1101_cf.LengthConfig >= 0 || tmp_cc1101_cf.LengthConfig <= 3)
-       && (tmp_cc1101_cf.PacketLength >= 0 || tmp_cc1101_cf.PacketLength <= 255)
-       && (tmp_cc1101_cf.Crc == 0          || tmp_cc1101_cf.Crc == 1)
-       && (tmp_cc1101_cf.CRC_AF == 0       || tmp_cc1101_cf.CRC_AF == 1)
-       && (tmp_cc1101_cf.DcFilterOff == 0  || tmp_cc1101_cf.DcFilterOff == 1)
-       && (tmp_cc1101_cf.Manchester == 0   || tmp_cc1101_cf.Manchester == 1)
-       && (tmp_cc1101_cf.FEC == 0          || tmp_cc1101_cf.FEC == 1)
-       && (tmp_cc1101_cf.PRE >= 0          || tmp_cc1101_cf.PRE <= 7)
-       && (tmp_cc1101_cf.PQT >= 0          || tmp_cc1101_cf.PQT <= 4)
-       && (tmp_cc1101_cf.AppendStatus == 1 || tmp_cc1101_cf.AppendStatus == 0)
-    ){
-      if(tmp_cc1101_cf.is_sender){
-        DOLOGLN(F("SENDER"));
-      } else {
-        DOLOGLN(F("RECEIVER"));
-      }
-      /* keep/store */
-      if(0 != memcmp(&cfg.cc1101[0], &tmp_cc1101_cf, sizeof(cc1101_cfg_t))){
-        DOLOGLN(F("Config changed, saving to EEPROM"));
-        memcpy((char *)&cfg.cc1101[0], &tmp_cc1101_cf, sizeof(cc1101_cfg_t));
-        EEPROM.put(CFG_EEPROM, cfg);
-        EEPROM.commit();
-        cc1101_changed[0] = 1;
-      } else {
-        DOLOGLN(F("Config not changed, not saving to EEPROM"));
-      }
-    } else {
+    if(!(   cc1101_int_in(v[0], 0, 1)     /* is_sender */
+         && cc1101_int_in(v[1], 0, 1)     /* CCMode */
+         && cc1101_int_in(v[2], 0, 4)     /* Modulation */
+         && v[3] >= 300 && v[3] <= 928    /* MHz, CC1101 frequency bands */
+         && v[4] >= 0                     /* Deviation */
+         && cc1101_int_in(v[5], 0, 255)   /* Channel */
+         && v[6] > 0                      /* Chsp */
+         && v[7] > 0                      /* RxBW */
+         && v[8] > 0                      /* DRate */
+         && cc1101_pa_ok(v[9])            /* PA */
+         && cc1101_int_in(v[10], 0, 7)    /* SyncMode */
+         && cc1101_int_in(v[11], 0, 255)  /* SyncWord1 */
+         && cc1101_int_in(v[12], 0, 255)  /* SyncWord2 */
+         && cc1101_int_in(v[13], 0, 3)    /* AdrChk */
+         && cc1101_int_in(v[14], 0, 255)  /* Addr */
+         && cc1101_int_in(v[15], 0, 1)    /* WhiteData */
+         && cc1101_int_in(v[16], 0, 3)    /* PktFormat */
+         && cc1101_int_in(v[17], 0, 3)    /* LengthConfig */
+         && cc1101_int_in(v[18], 0, 255)  /* PacketLength */
+         && cc1101_int_in(v[19], 0, 1)    /* Crc */
+         && cc1101_int_in(v[20], 0, 1)    /* CRC_AF */
+         && cc1101_int_in(v[21], 0, 1)    /* DcFilterOff */
+         && cc1101_int_in(v[22], 0, 1)    /* Manchester */
+         && cc1101_int_in(v[23], 0, 1)    /* FEC */
+         && cc1101_int_in(v[24], 0, 7)    /* PRE */
+         && cc1101_int_in(v[25], 0, 7)    /* PQT */
+         && cc1101_int_in(v[26], 0, 1)    /* AppendStatus */
+    )){
       s->GetSerial()->println(F("cc1101 cfg invalid"));
       s->GetSerial()->println(F("ERROR"));
       return;
     }
+    /* build the new config from a zeroed struct, keeping the init/version markers */
+    cc1101_cfg_t tmp_cc1101_cf;
+    memset(&tmp_cc1101_cf, 0, sizeof(tmp_cc1101_cf));
+    tmp_cc1101_cf.initialized = cfg.cc1101[0].initialized;
+    tmp_cc1101_cf.version     = cfg.cc1101[0].version;
+    tmp_cc1101_cf.is_sender = (uint8_t)v[0];
+    tmp_cc1101_cf.CCMode = (uint8_t)v[1];
+    tmp_cc1101_cf.Modulation = (uint8_t)v[2];
+    tmp_cc1101_cf.MHz = (double)v[3];
+    tmp_cc1101_cf.Deviation = (double)v[4];
+    tmp_cc1101_cf.Channel = (uint8_t)v[5];
+    tmp_cc1101_cf.Chsp = (double)v[6];
+    tmp_cc1101_cf.RxBW = (double)v[7];
+    tmp_cc1101_cf.DRate = (double)v[8];
+    tmp_cc1101_cf.PA = (int8_t)v[9];
+    tmp_cc1101_cf.SyncMode = (uint8_t)v[10];
+    tmp_cc1101_cf.SyncWord1 = (uint8_t)v[11];
+    tmp_cc1101_cf.SyncWord2 = (uint8_t)v[12];
+    tmp_cc1101_cf.AdrChk = (uint8_t)v[13];
+    tmp_cc1101_cf.Addr = (uint8_t)v[14];
+    tmp_cc1101_cf.WhiteData = (uint8_t)v[15];
+    tmp_cc1101_cf.PktFormat = (uint8_t)v[16];
+    tmp_cc1101_cf.LengthConfig = (uint8_t)v[17];
+    tmp_cc1101_cf.PacketLength = (uint8_t)v[18];
+    tmp_cc1101_cf.Crc = (uint8_t)v[19];
+    tmp_cc1101_cf.CRC_AF = (uint8_t)v[20];
+    tmp_cc1101_cf.DcFilterOff = (uint8_t)v[21];
+    tmp_cc1101_cf.Manchester = (uint8_t)v[22];
+    tmp_cc1101_cf.FEC = (uint8_t)v[23];
+    tmp_cc1101_cf.PRE = (uint8_t)v[24];
+    tmp_cc1101_cf.PQT = (uint8_t)v[25];
+    tmp_cc1101_cf.AppendStatus = (uint8_t)v[26];
+    if(tmp_cc1101_cf.is_sender){
+      DOLOGLN(F("SENDER"));
+    } else {
+      DOLOGLN(F("RECEIVER"));
+    }
+    /* keep/store */
+    if(!cc1101_cfg_equal(&cfg.cc1101[0], &tmp_cc1101_cf)){
+      DOLOGLN(F("Config changed, saving to EEPROM"));
+      memcpy(&cfg.cc1101[0], &tmp_cc1101_cf, sizeof(cc1101_cfg_t));
+      EEPROM.put(CFG_EEPROM, cfg);
+      EEPROM.commit();
+      cc1101_changed[0] = 1;
+    } else {
+      DOLOGLN(F("Config not changed, not saving to EEPROM"));
+    }
   } else if(p = at_cmd_check("AT+NTP_HOST=", atcmdline, cmd_len)){
-    size_t sz = (atcmdline+cmd_len)-p+1;
-    if(sz > 63){
+    size_t len = strlen(p);
+    if(len > 63){
       s->GetSerial()->println(F("NTP hostname max 63 chars"));
       s->GetSerial()->println(F("ERROR"));
       return;
     }
-    strncpy((char *)&cfg.ntp_host, p, sz);
+    memset((char *)&cfg.ntp_host, 0, sizeof(cfg.ntp_host));
+    memcpy((char *)&cfg.ntp_host, p, len);
     EEPROM.put(CFG_EEPROM, cfg);
     EEPROM.commit();
     setup_wifi();
-    configTime(0, 0, (char *)&cfg.ntp_host);
+    ntp_start();
   } else if(p = at_cmd_check("AT+NTP_HOST?", atcmdline, cmd_len)){
     s->GetSerial()->println(cfg.ntp_host);
     return;
@@ -398,14 +457,31 @@ void at_cmd_handler(SerialCommands* s, const char* atcmdline){
     return;
   } else if(p = at_cmd_check("AT+RESET", atcmdline, cmd_len)){
     s->GetSerial()->println(F("OK"));
-    resetFunc();
+    ESP.restart();
     return;
-  } else if(cmd_len >= 3 && (p = at_cmd_check("AT+", atcmdline, cmd_len))){
+  } else if(cmd_len >= 3 && strncmp(atcmdline, "AT+", 3) == 0){
     s->GetSerial()->println(F("ERROR unkown AT command"));
     return;
   } else {
-	/* just relay the data */
+    /* not an AT command: queue it for the radio, sender only */
+    if(!cfg.cc1101[0].is_sender){
+      s->GetSerial()->println(F("ERROR not a sender, data dropped"));
+      return;
+    }
+    if(!cc1101_enabled[0]){
+      s->GetSerial()->println(F("ERROR no cc1101"));
+      return;
+    }
+    if(uart_buffer[0] != 0){
+      s->GetSerial()->println(F("ERROR tx busy"));
+      return;
+    }
+    if(cmd_len > CC1101_MAX_PAYLOAD){
+      s->GetSerial()->println(F("ERROR payload max 64 bytes"));
+      return;
+    }
     memcpy((char *)&uart_buffer, atcmdline, cmd_len);
+    uart_buffer[cmd_len] = 0;
     return;
   }
   s->GetSerial()->println(F("OK"));
@@ -416,7 +492,6 @@ void setup(){
 
   // Serial setup, at 115200
   Serial.begin(115200);
-  Serial.setDebugOutput(true);
  
   // setup cfg
   setup_cfg();
@@ -446,12 +521,13 @@ void setup(){
     DOLOGLN(cfg.ntp_host);
   }
   // setup NTP sync to RTC
-  configTime(0, 0, (char *)&cfg.ntp_host);
+  ntp_start();
 
   delay(5000);
 
   /* ESP32 header not set? ELECHOUSE_cc1101 library uses that for default SPI
      pins and doesn't find it */
+  SPI.begin();
   ELECHOUSE_cc1101.setSpiPin(SCK, MISO, MOSI, SS);
   if(ELECHOUSE_cc1101.getCC1101()){
     DOLOGLN("SPI cc1101 found, Connection OK");
@@ -463,7 +539,7 @@ void setup(){
 
   pinMode(LED, OUTPUT);
 
-  SPI.begin();
+  ELECHOUSE_cc1101.setGDO0(CC1101_GDO0_PIN);
   ELECHOUSE_cc1101.Init();
 }
 
@@ -471,10 +547,18 @@ void loop(){
   // any new AT command? on USB uart
   ATSc.ReadSerial();
 
+  // NTP sync: SNTP reports COMPLETED once and then resets, so latch it
+  if(sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED){
+    ntp_is_synced = 1;
+  }
+
   // check cc1101 status
   if(millis() - last_cc1101_check[0] > 5000){
-    cc1101_read_cfg(&cfg.cc1101[0]);
     if(ELECHOUSE_cc1101.getCC1101()){
+      if(!cc1101_enabled[0]){
+        /* chip (re)appeared: its registers may be reset, so apply the config again */
+        cc1101_initialized[0] = 0;
+      }
       DOLOGLN("SPI cc1101 found, Connection OK");
       cc1101_enabled[0] = 1;
     } else {
@@ -490,15 +574,15 @@ void loop(){
     } else {
       DOLOGLN(F("CC1101 config apply at init"));
     }
-    ELECHOUSE_cc1101.setGDO(0, 1);
     ELECHOUSE_cc1101.setCCMode(cfg.cc1101[0].CCMode);
     ELECHOUSE_cc1101.setModulation(cfg.cc1101[0].Modulation);
-    //ELECHOUSE_cc1101.setMHZ(cfg.cc1101[0].MHz);
     ELECHOUSE_cc1101.setDeviation(cfg.cc1101[0].Deviation);
     ELECHOUSE_cc1101.setChannel(cfg.cc1101[0].Channel);
     ELECHOUSE_cc1101.setChsp(cfg.cc1101[0].Chsp);
     ELECHOUSE_cc1101.setRxBW(cfg.cc1101[0].RxBW);
     ELECHOUSE_cc1101.setDRate(cfg.cc1101[0].DRate);
+    /* setMHZ before setPA: the PA table depends on the band */
+    ELECHOUSE_cc1101.setMHZ(cfg.cc1101[0].MHz);
     ELECHOUSE_cc1101.setPA(cfg.cc1101[0].PA);
     ELECHOUSE_cc1101.setSyncMode(cfg.cc1101[0].SyncMode);
     ELECHOUSE_cc1101.setSyncWord(cfg.cc1101[0].SyncWord1, cfg.cc1101[0].SyncWord2);
@@ -571,10 +655,13 @@ void loop(){
     DOLOG(cfg.cc1101[0].AppendStatus);
     DOLOGLN();
     }
+    /* the sender idles until SendData() starts a packet; a TX strobe with an empty FIFO is not wanted */
     if(cfg.cc1101[0].is_sender)
-      ELECHOUSE_cc1101.SetTx(cfg.cc1101[0].MHz);
+      ELECHOUSE_cc1101.setSidle();
     else
-      ELECHOUSE_cc1101.SetRx(cfg.cc1101[0].MHz);
+      ELECHOUSE_cc1101.SetRx();
+    /* dump the registers once per config change, not every poll */
+    cc1101_read_cfg();
     // bookeeping
     cc1101_changed[0]     = 0;
     cc1101_initialized[0] = 1;
@@ -609,47 +696,37 @@ void loop(){
     led_last_check = millis();
   }
 
-  if(cc1101_enabled[0] && 0){
+  // radio data path: the sender sends the queued line, the receiver prints what it gets
+  if(cc1101_enabled[0] && cc1101_initialized[0] && !cc1101_changed[0]){
     if(cfg.cc1101[0].is_sender){
-      int buffer_len = strlen((char *)&uart_buffer);
-      if(buffer_len > 0){
-        if(cfg.do_verbose){
-          DOLOG(F("SEND BUFFER["));
-          DOLOG(buffer_len);
-          DOLOG(F("]>>"));
-          DOLOG(uart_buffer);
-          DOLOGLN(F("<<"));
-        }
-        /* use "byte" as type, and convert to that, the ELECHOUSE_cc1101 lib behaves differently */
-        ELECHOUSE_cc1101.SendData((byte *)&uart_buffer, (byte)buffer_len);
-        memset((char *)&uart_buffer, 0, sizeof(uart_buffer));
-      }
-    } else if(!cfg.cc1101[0].is_sender){
-      if(cfg.do_verbose){
-        if(millis() - last_logline > 5000){
-          DOLOG(F("Rssi: "));
-          DOLOGLN(ELECHOUSE_cc1101.getRssi());
-          last_logline = millis();
-        }
-      }
-      if(ELECHOUSE_cc1101.CheckReceiveFlag()){
-        if(cfg.do_verbose){
-          uint8_t lqi = ELECHOUSE_cc1101.getLqi();
-          DOLOG(F("CHECK RECEIVE BUFFER: lqi="));
-          DOLOG(lqi);
-          DOLOG(F(",crc="));
-          DOLOGLN(bitRead(lqi,7));
-        }
-        int len = ELECHOUSE_cc1101.ReceiveData((byte *)&in_buffer);
-        in_buffer[len] = '\0';
-        if(cfg.do_verbose){
-          DOLOG(F("RECEIVED["));
-          DOLOG(strlen((char *)&in_buffer));
-          DOLOG(F("]>>"));
-        }
-        Serial.println((char *)&in_buffer);
+      if(uart_buffer[0] != 0){
+        size_t len = strlen(uart_buffer);
+        DOLOG(F("SEND["));
+        DOLOG(len);
+        DOLOG(F("]>>"));
+        DOLOG(uart_buffer);
         DOLOGLN(F("<<"));
-        memset(in_buffer, 0, sizeof(in_buffer));
+        /* SendData() waits for GDO0 (bounded) and returns */
+        ELECHOUSE_cc1101.SendData((byte *)uart_buffer, (byte)len);
+        memset(uart_buffer, 0, sizeof(uart_buffer));
+      }
+    } else if(ELECHOUSE_cc1101.CheckReceiveFlag()){
+      /* LQI holds the CRC-OK bit of the packet now in the FIFO */
+      uint8_t lqi = ELECHOUSE_cc1101.getLqi();
+      bool crc_ok = bitRead(lqi, 7);
+      int len = ELECHOUSE_cc1101.ReceiveData((byte *)in_buffer);
+      if(len <= 0){
+        DOLOGLN(F("RX: GDO0 high but FIFO empty"));
+      } else if(cfg.cc1101[0].Crc && cfg.cc1101[0].AppendStatus && !crc_ok){
+        DOLOG(F("RX: dropped, bad CRC, len="));
+        DOLOGLN(len);
+      } else {
+        DOLOG(F("RX["));
+        DOLOG(len);
+        DOLOG(F("] lqi="));
+        DOLOGLN(lqi & 0x7F);
+        Serial.write(in_buffer, len);
+        Serial.println();
       }
     }
   }
@@ -760,24 +837,24 @@ void setup_wifi(){
 
 #define CC1101_RSSI       0xF4
 
-#define _BIT(v, b, n)        (v & b) >> n
+#define _BIT(v, b, n)        (((v) & (b)) >> (n))
 
 #define CC1101_CFG_V(v, k)                cc1101_cfg(&v, k)
 #define IOCFG2_GDO2_INV(v)                _BIT(cc1101_cfg(&v,CC1101_IOCFG2  ), 0b01000000, 6)
-#define IOCFG2_GDO2_CFG(v)                _BIT(cc1101_cfg(&v,CC1101_IOCFG2  ), 0b00111111, 5)
+#define IOCFG2_GDO2_CFG(v)                _BIT(cc1101_cfg(&v,CC1101_IOCFG2  ), 0b00111111, 0)
 #define IOCFG1_GDO1_DS(v)                 _BIT(cc1101_cfg(&v,CC1101_IOCFG1  ), 0b10000000, 7)
 #define IOCFG1_GDO1_INV(v)                _BIT(cc1101_cfg(&v,CC1101_IOCFG1  ), 0b01000000, 6)
-#define IOCFG1_GDO1_CFG(v)                _BIT(cc1101_cfg(&v,CC1101_IOCFG1  ), 0b00111111, 5)
+#define IOCFG1_GDO1_CFG(v)                _BIT(cc1101_cfg(&v,CC1101_IOCFG1  ), 0b00111111, 0)
 #define IOCFG0_GDO0_TEMP_SENSOR_ENABLE(v) _BIT(cc1101_cfg(&v,CC1101_IOCFG0  ), 0b10000000, 7)
 #define IOCFG0_GDO0_INV(v)                _BIT(cc1101_cfg(&v,CC1101_IOCFG0  ), 0b01000000, 6)
-#define IOCFG0_GDO0_CFG(v)                _BIT(cc1101_cfg(&v,CC1101_IOCFG0  ), 0b00111111, 5)
+#define IOCFG0_GDO0_CFG(v)                _BIT(cc1101_cfg(&v,CC1101_IOCFG0  ), 0b00111111, 0)
 #define FIFOTHR_ADC_RETENTION(v)          _BIT(cc1101_cfg(&v,CC1101_FIFOTHR ), 0b01000000, 6)
 #define FIFOTHR_CLOSE_IN_RX(v)            _BIT(cc1101_cfg(&v,CC1101_FIFOTHR ), 0b00110000, 4)
 #define FIFOTHR_FIFO_THR(v)               _BIT(cc1101_cfg(&v,CC1101_FIFOTHR ), 0b00001111, 0)
 #define SYNC1_SYNC1(v)                    _BIT(cc1101_cfg(&v,CC1101_SYNC1   ), 0b11111111, 0)
 #define SYNC0_SYNC0(v)                    _BIT(cc1101_cfg(&v,CC1101_SYNC0   ), 0b11111111, 0)
 #define PKTLEN_PACKET_LENGTH(v)           _BIT(cc1101_cfg(&v,CC1101_PKTLEN  ), 0b11111111, 0)
-#define PKTCTRL1_PQT(v)                   _BIT(cc1101_cfg(&v,CC1101_PKTCTRL1), 0b11100000, 7)
+#define PKTCTRL1_PQT(v)                   _BIT(cc1101_cfg(&v,CC1101_PKTCTRL1), 0b11100000, 5)
 #define PKTCTRL1_CRC_AUTOFLUSH(v)         _BIT(cc1101_cfg(&v,CC1101_PKTCTRL1), 0b00001000, 3)
 #define PKTCTRL1_APPEND_STATUS(v)         _BIT(cc1101_cfg(&v,CC1101_PKTCTRL1), 0b00000100, 2)
 #define PKTCTRL1_ADR_CHK(v)               _BIT(cc1101_cfg(&v,CC1101_PKTCTRL1), 0b00000011, 0)
@@ -787,7 +864,7 @@ void setup_wifi(){
 #define PKTCTRL0_LENGTH_CONFIG(v)         _BIT(cc1101_cfg(&v,CC1101_PKTCTRL0), 0b00000011, 0)
 #define ADDR_DEVICE_ADDR(v)               _BIT(cc1101_cfg(&v,CC1101_ADDR),     0b11111111, 0)
 #define CHANNR_CHAN(v)                    _BIT(cc1101_cfg(&v,CC1101_CHANNR),   0b11111111, 0)
-#define FSCTRL1_FREQ_IF(v)                _BIT(cc1101_cfg(&v,CC1101_FSCTRL1 ), 0b00011111, 5)
+#define FSCTRL1_FREQ_IF(v)                _BIT(cc1101_cfg(&v,CC1101_FSCTRL1 ), 0b00011111, 0)
 #define FSCTRL0_FREQOFF(v)                _BIT(cc1101_cfg(&v,CC1101_FSCTRL0 ), 0b11111111, 0)
 #define FREQ2_FREQ(v)                     _BIT(cc1101_cfg(&v,CC1101_FREQ2   ), 0b00111111, 0)
 #define FREQ1_FREQ(v)                     _BIT(cc1101_cfg(&v,CC1101_FREQ1   ), 0b11111111, 0)
@@ -851,7 +928,7 @@ void setup_wifi(){
 #define FSCAL3_CHP_CURR_CAL_EN(v)         _BIT(cc1101_cfg(&v,CC1101_FSCAL3),   0b00110000, 4)
 #define FSCAL3_FSCAL3_2(v)                _BIT(cc1101_cfg(&v,CC1101_FSCAL3),   0b00001111, 0)
 #define FSCAL2_VCO_CORE_H_EN(v)           _BIT(cc1101_cfg(&v,CC1101_FSCAL2),   0b00100000, 5)
-#define FSCAL2_FSCAL2(v)                  _BIT(cc1101_cfg(&v,CC1101_FSCAL2),   0b00011111, 4)
+#define FSCAL2_FSCAL2(v)                  _BIT(cc1101_cfg(&v,CC1101_FSCAL2),   0b00011111, 0)
 #define FSCAL1_FSCAL1(v)                  _BIT(cc1101_cfg(&v,CC1101_FSCAL1),   0b00111111, 0)
 #define FSCAL0_FSCAL0(v)                  _BIT(cc1101_cfg(&v,CC1101_FSCAL0),   0b01111111, 0)
 #define RCCTRL1_RCCTRL1(v)                _BIT(cc1101_cfg(&v,CC1101_RCCTRL1),  0b01111111, 0)
@@ -960,14 +1037,12 @@ void setup_wifi(){
 
 #define CC1101_BURST         0x40
 #define CC1101_READ          0x80
-#define CC1101_READ_CFG(c,k) cc1101_cfg(&c,k)
-#define CC1101_READ_CFG(c,k,s) cc1101_cfg(&c,k)
 
 inline uint8_t cc1101_cfg(cc1101_cfg_regs_t *c, uint8_t k){
   return *(((uint8_t *)c)+k);
 }
 
-void cc1101_read_cfg(cc1101_cfg_t *c){
+void cc1101_read_cfg(){
   static cc1101_cfg_regs_t r_buffer;
   cc1101_fetch_cfg((uint8_t*)&r_buffer);
   if(cfg.do_verbose){
@@ -990,44 +1065,58 @@ void dolog(const char *format, ...){
   }
 }
 
+/* wait (bounded) for MISO low before using the bus, per datasheet; false on timeout */
+bool cc1101_wait_miso(){
+  unsigned long t = millis();
+  while(digitalRead(MISO)){
+    if(millis() - t > 10)
+      return false;
+    doYIELD;
+  }
+  return true;
+}
+
 void cc1101_fetch_cfg(uint8_t *r_buffer){
-  uint16_t n, v;
-  uint16_t status = 0;
-  SPI.begin();
+  uint16_t n;
+  uint8_t v;
   SPI.beginTransaction(SPISettings(10000000, MSBFIRST, SPI_MODE0));
   digitalWrite(SS, LOW);
-  /* per cc1101 datasheet, check MISO being low before continueing after CS set LOW */
-  while(digitalRead(MISO)) doYIELD;
-  status = SPI.transfer(n|CC1101_BURST|CC1101_READ);
+  if(!cc1101_wait_miso()){
+    digitalWrite(SS, HIGH);
+    SPI.endTransaction();
+    DOLOGLN(F("cc1101 MISO timeout"));
+    return;
+  }
+  /* burst read (0x40|0x80) starting at register 0x00: first byte is the status */
+  uint8_t status = SPI.transfer(0|CC1101_BURST|CC1101_READ);
   DOLOG("STATUS:"); DOLOGLN(status);
   for(n=0; n < 0x2e + 1; n++){
     doYIELD;
     *r_buffer++ = v = SPI.transfer(0);
     if(cfg.do_verbose){
       char info_str[25];
-      int r = snprintf((char *)&info_str, 25, "0x%02x=%d", n, v);
+      snprintf((char *)&info_str, 25, "0x%02x=%d", n, v);
       DOLOGLN(info_str);
     }
   }
   digitalWrite(SS, HIGH);
   SPI.endTransaction();
-  SPI.end();
 }
 
 uint16_t cc1101_spi_addr(uint8_t address, uint8_t value){
-  #ifdef DEBUG
-  Serial.print(address);
-  Serial.print(F(","));
-  Serial.print(value);
-  Serial.print(F(","));
-  Serial.print(value);
-  Serial.println();
-  #endif
+  DOLOG(F("SPI write addr="));
+  DOLOG(address);
+  DOLOG(F(" value="));
+  DOLOGLN(value);
+  uint16_t v = 0;
   SPI.beginTransaction(SPISettings(10000000, MSBFIRST, SPI_MODE0));
   digitalWrite(SS, LOW);
-  /* per cc1101 datasheet, check MISO being low before continuing after CS set LOW */
-  while(digitalRead(MISO)) doYIELD;
-  uint16_t v = SPI.transfer16((address << 8) & value);
+  if(cc1101_wait_miso()){
+    /* header byte (address, R/W=0, burst=0) in the high byte, data in the low byte */
+    v = SPI.transfer16(((uint16_t)address << 8) | value);
+  } else {
+    DOLOGLN(F("cc1101 MISO timeout"));
+  }
   digitalWrite(SS, HIGH);
   SPI.endTransaction();
   return v;
