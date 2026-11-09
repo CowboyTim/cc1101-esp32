@@ -1,0 +1,51 @@
+# Boards for cc1101-esp32, read by deploy.py.
+#
+# One [[board]] per physical board.
+#   name  what you type on the command line (./deploy.py flash sender)
+#   chip  esp32c3 | esp32s3
+#   role  sender | receiver; sets is_sender in AT+CC1101
+#   mac   identifies the board: deploy.py finds its port by matching this against
+#         the USB serial number. Get it from `./deploy.py list`. A board with an
+#         empty mac can't be flashed or configured yet.
+
+[[board]]
+name = "sender"
+chip = "esp32c3"
+role = "sender"
+mac  = ""
+
+[[board]]
+name = "receiver"
+chip = "esp32c3"
+role = "receiver"
+mac  = ""
+
+# Radio settings sent to every board with AT+CC1101 (is_sender comes from the role).
+# Field names match the order in cc1101-esp32.ino.
+[radio]
+CCMode       = 1
+Modulation   = 0
+MHz          = 433.92
+Deviation    = 47.60
+Channel      = 0
+Chsp         = 199.95
+RxBW         = 812.50
+DRate        = 99.97
+PA           = 10
+SyncMode     = 2
+SyncWord1    = 211
+SyncWord2    = 145
+AdrChk       = 0
+Addr         = 0
+WhiteData    = 1
+PktFormat    = 0
+LengthConfig = 1
+PacketLength = 255
+Crc          = 1
+CRC_AF       = 0
+DcFilterOff  = 1
+Manchester   = 0
+FEC          = 0
+PRE          = 2
+PQT          = 0
+AppendStatus = 1
